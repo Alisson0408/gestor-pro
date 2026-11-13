@@ -147,6 +147,7 @@ function traduz(m){return m.replace('Invalid login credentials','E-mail ou senha
 async function busy(btn,fn){if(btn){btn.disabled=true}try{return await fn()}catch(e){erro(e)}finally{if(btn)btn.disabled=false}}
 
 // ============ SUPABASE ============
+const VEIO_DE_CONVITE=/type=invite/.test(location.hash);
 let sb=null;
 if(CONFIG.SUPABASE_URL&&CONFIG.SUPABASE_ANON_KEY&&window.supabase){sb=window.supabase.createClient(CONFIG.SUPABASE_URL,CONFIG.SUPABASE_ANON_KEY)}
 async function q(p){const {data,error}=await p;if(error)throw error;return data}
@@ -861,7 +862,13 @@ function editEmp(id){const e=S._adm.find(x=>x.id===id);modal(`<h3>${esc(e.nome)}
 
 // ============ INÍCIO ============
 if(sb){sb.auth.onAuthStateChange((ev)=>{if(ev==='PASSWORD_RECOVERY'){setTimeout(()=>{modal(`<h3>Criar nova senha</h3><form class="f" style="grid-template-columns:1fr;margin-top:10px" onsubmit="event.preventDefault();busy(this.querySelector('button'),async()=>{const {error}=await sb.auth.updateUser({password:this.s.value});if(error)throw error;fechar();toast('Senha alterada!');carregarSessao()})"><div><label>Nova senha</label><input name="s" type="password" minlength="6" required></div><button class="btn p">Salvar nova senha</button></form>`)},300)}})}
-carregarSessao().catch(erro);
+carregarSessao().then(()=>{if(VEIO_DE_CONVITE&&S.user)setTimeout(criarSenhaConvite,400)}).catch(erro);
+function criarSenhaConvite(){
+  modal(`<h3>👋 Bem-vindo(a)!</h3><p style="color:var(--muted);margin:8px 0 14px">Crie a sua senha para entrar no sistema das próximas vezes com o e-mail <b style="color:var(--text)">${esc(S.user.email)}</b>.</p>
+  <form id="fcs" class="f" style="grid-template-columns:1fr"><div><label>Nova senha (mínimo 6 caracteres)</label><input name="s" type="password" minlength="6" required autocomplete="new-password"></div>
+  <div><label>Repita a senha</label><input name="s2" type="password" minlength="6" required autocomplete="new-password"></div><button class="btn p" id="bcs">Salvar minha senha</button></form>`);
+  $('#fcs').onsubmit=e=>{e.preventDefault();if(e.target.s.value!==e.target.s2.value)return toast('As senhas não são iguais',1);busy($('#bcs'),async()=>{const {error}=await sb.auth.updateUser({password:e.target.s.value});if(error)throw error;fechar();toast('Senha criada! Use seu e-mail e essa senha para entrar.')})};
+}
 </script>
 </body>
 </html>
