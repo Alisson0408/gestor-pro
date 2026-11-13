@@ -15,6 +15,7 @@ const CONFIG = {
   SUPABASE_ANON_KEY: 'sb_publishable_0h0bwe65Rln6dJe6K7Ceog_p4OUH6U_',  // chave publishable (pública por design)
   NOME_SISTEMA:      'Gestor PRO',
   WHATSAPP_SUPORTE:  '5519989522187',  // seu WhatsApp com DDI+DDD, só números
+  ALERTA_ESTOQUE:    10,     // produtos com esta quantidade ou menos ficam em vermelho (quando o produto não tem mínimo próprio)
   CONTAS_BANCARIAS:  false,  // false = só o Caixa da empresa (lançamento diário) · true = várias contas (BB, Caixa, Itaú…)
 };
 /* ==================================================================== */
@@ -32,6 +33,10 @@ aside{width:230px;background:rgba(10,15,32,.75);border-right:1px solid var(--lin
 .logo small{display:block;font-weight:500;font-size:11px;color:var(--muted);max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 nav button{display:flex;align-items:center;gap:10px;width:100%;padding:11px 12px;border:0;background:none;border-radius:10px;cursor:pointer;color:var(--muted);font-weight:600;text-align:left;margin-bottom:4px}
 nav button:hover{background:var(--panel)}
+nav button .bdg{margin-left:auto;background:var(--bad);color:#fff;font-size:11px;font-weight:800;border-radius:20px;padding:1px 7px;min-width:20px;text-align:center}
+tr.baixo td{background:rgba(255,93,115,.07)}
+.dupav{background:rgba(255,181,71,.12);border:1px solid rgba(255,181,71,.5);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.6}.dupav b{color:var(--warn)}
+.alerta-rep{background:rgba(255,93,115,.14);border:1px solid rgba(255,93,115,.45);border-radius:14px;padding:12px 16px;margin-bottom:16px;cursor:pointer;display:flex;flex-direction:column;gap:2px}.alerta-rep b{color:var(--bad);font-size:15px}.alerta-rep span{color:var(--muted);font-size:13px}
 nav button.on{background:linear-gradient(135deg,rgba(91,140,255,.18),rgba(138,91,255,.18));color:#fff;box-shadow:inset 0 0 0 1px rgba(91,140,255,.35)}
 nav .ic{width:20px;text-align:center}
 main{flex:1;padding:28px 32px;max-width:1300px;width:100%}
@@ -291,7 +296,7 @@ function montarApp(){
 function go(v){if(v!==S.view)S.buscaCad='';S.view=v;document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));render();window.scrollTo(0,0)}
 const VIEWS={};
 async function render(){
-  const m=$('#main');if(!m)return;
+  const m=$('#main');if(!m)return;try{badgeEstoque()}catch(_){}
   const fn=VIEWS[S.view]||VIEWS.painel;
   const r=fn();
   if(r instanceof Promise){m.innerHTML='<div class="empty"><span class="loading"></span></div>';try{m.innerHTML=banner()+await r}catch(e){erro(e);m.innerHTML='<div class="empty">Não foi possível carregar. Verifique a internet.</div>'}}
@@ -305,7 +310,11 @@ function banner(){
   if(dias<=3)return `<div class="banner">⏰ Sua assinatura vence ${dias<=0?'hoje':'em '+dias+' dia(s)'} (${DD(e.vencimento)}). <span class="sp"></span><a class="btn sm" style="text-decoration:none" href="${zap('Quero renovar o '+CONFIG.NOME_SISTEMA+' da empresa '+e.nome)}" target="_blank" rel="noopener">Renovar</a></div>`;
   return '';
 }
-const status=p=>p.estoque<=0?['Zerado','t-bad']:p.estoque<=p.minimo?['Baixo','t-warn']:['OK','t-ok'];
+const lim=p=>p.minimo>0?p.minimo:(+CONFIG.ALERTA_ESTOQUE||10);
+const repor=p=>p.ativo!==false&&p.estoque<=lim(p);
+const status=p=>p.estoque<=0?['Zerado','t-bad']:repor(p)?['Repor','t-bad']:['OK','t-ok'];
+function badgeEstoque(){const b=document.querySelector('#nav button[data-v=estoque]');if(!b)return;let i=b.querySelector('.bdg');const n=S.produtos.filter(repor).length;if(!n){if(i)i.remove();return}if(!i){i=document.createElement('span');i.className='bdg';b.appendChild(i)}i.textContent=n}
+function copiarReposicao(){const l=S.produtos.filter(repor).sort((a,b)=>a.estoque-b.estoque);const t=`*Lista de reposição — ${S.empresa.nome}*\n${new Date().toLocaleDateString('pt-BR')}\n\n${l.map(p=>`• ${p.nome}${p.descricao?' '+p.descricao:''} — tem ${N(p.estoque)}, comprar ${N(Math.max(lim(p)*2-p.estoque,1))} ${p.unidade}`).join('\n')}`;navigator.clipboard.writeText(t).then(()=>toast('Lista copiada! Cole no WhatsApp do fornecedor.'),()=>toast('Não foi possível copiar',1))}
 const opts=()=>S.produtos.map(p=>`<option value="${p.id}">${esc(p.nome)} — estoque: ${N(p.estoque)}</option>`).join('');
 const lucroDe=vs=>vs.reduce((s,v)=>s+v.total-v.itens.reduce((a,i)=>a+i.qtd*i.custo,0),0);
 
@@ -316,26 +325,27 @@ VIEWS.painel=()=>{
   const hoje=at.filter(v=>new Date(v.data)>=ini);
   const now=new Date();const mes=at.filter(v=>{const d=new Date(v.data);return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear()});
   const valEst=S.produtos.reduce((s,p)=>s+Math.max(p.estoque,0)*p.custo,0);
-  const baixos=S.produtos.filter(p=>p.estoque<=p.minimo);
+  const baixos=S.produtos.filter(repor).sort((a,b)=>a.estoque-b.estoque);
   const dias=[];for(let d=6;d>=0;d--){const a=new Date();a.setHours(0,0,0,0);a.setDate(a.getDate()-d);const b=+a+864e5;dias.push({l:a.toLocaleDateString('pt-BR',{weekday:'short'}).replace('.',''),v:at.filter(v=>{const t=+new Date(v.data);return t>=+a&&t<b}).reduce((s,v)=>s+v.total,0)})}
   const mx=Math.max(...dias.map(d=>d.v),1);
   const tp={};mes.forEach(v=>v.itens.forEach(i=>{tp[i.nome]=(tp[i.nome]||0)+i.qtd*i.preco}));
   const top=Object.entries(tp).sort((a,b)=>b[1]-a[1]).slice(0,5);const tmx=top[0]?top[0][1]:1;
   const fatMes=mes.reduce((s,v)=>s+v.total,0);
   return `<div class="row"><div><h1>Painel</h1><p class="sub">${new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'})}</p></div><span class="sp"></span><button class="btn sm" onclick="atualizar(this)">↻ Atualizar</button></div>
+  ${baixos.length?`<div class="alerta-rep" onclick="S.fEst='baixo';go('estoque')"><b>🔴 ${baixos.length} produto(s) precisam de reposição</b><span>${baixos.filter(p=>p.estoque<=0).length} zerado(s) · ${CONFIG.ALERTA_ESTOQUE||10} unidades ou menos ficam em vermelho. Toque para ver.</span></div>`:''}
   <div class="grid k4">
     <div class="card kpi"><div class="l">Vendas hoje</div><div class="v">${R(hoje.reduce((s,v)=>s+v.total,0))}</div><div class="h">${hoje.length} venda(s)${dono()?' · lucro '+R(lucroDe(hoje)):''}</div></div>
     <div class="card kpi"><div class="l">Faturamento do mês</div><div class="v">${R(fatMes)}</div><div class="h">Ticket médio ${R(mes.length?fatMes/mes.length:0)}</div></div>
     ${dono()?`<div class="card kpi"><div class="l">Lucro bruto do mês</div><div class="v" style="color:var(--ok)">${R(lucroDe(mes))}</div><div class="h">Venda − custo das mercadorias</div></div>
-    <div class="card kpi"><div class="l">Valor em estoque</div><div class="v">${R(valEst)}</div><div class="h">${S.produtos.length} produtos</div></div>`:`<div class="card kpi"><div class="l">Produtos</div><div class="v">${S.produtos.length}</div></div><div class="card kpi"><div class="l">Estoque baixo</div><div class="v" style="color:var(--warn)">${baixos.length}</div></div>`}
+    <div class="card kpi"><div class="l">Valor em estoque</div><div class="v">${R(valEst)}</div><div class="h">${S.produtos.length} produtos</div></div>`:`<div class="card kpi"><div class="l">Produtos</div><div class="v">${S.produtos.length}</div></div><div class="card kpi"><div class="l">Repor estoque</div><div class="v" style="color:var(--bad)">${baixos.length}</div></div>`}
   </div>
   ${dono()?finKpis():''}
   <div class="grid k2" style="margin-top:16px">
     <div class="card"><h3>Vendas — últimos 7 dias</h3><div class="chart">${dias.map(d=>`<div class="c"><span>${d.v?R(d.v).replace('R$','').trim():''}</span><b style="height:${d.v/mx*100}%"></b><span>${d.l}</span></div>`).join('')}</div></div>
     <div class="card"><h3>Mais vendidos no mês</h3>${top.length?top.map(([n,v])=>`<div style="margin-bottom:12px"><div class="row" style="margin-bottom:5px"><span>${esc(n)}</span><span class="sp"></span><b>${R(v)}</b></div><div class="bar"><i style="width:${v/tmx*100}%"></i></div></div>`).join(''):'<div class="empty">Sem vendas no mês</div>'}</div>
   </div>
-  <div class="card tw" style="margin-top:16px"><h3>⚠️ Repor estoque ${dono()?`<button class="btn sm" onclick="go('entrada')">Lançar entrada</button>`:''}</h3>
-  ${baixos.length?`<table><tr><th>Produto</th><th class="num">Atual</th><th class="num">Mínimo</th><th class="num">Sugestão de compra</th><th>Status</th></tr>${baixos.map(p=>{const s=status(p);return `<tr><td>${esc(p.nome)}</td><td class="num">${N(p.estoque)}</td><td class="num">${N(p.minimo)}</td><td class="num">${N(Math.max(p.minimo*2-p.estoque,0))} ${esc(p.unidade)}</td><td><span class="tag ${s[1]}">${s[0]}</span></td></tr>`}).join('')}</table>`:`<div class="empty">${S.produtos.length?'Tudo certo! Nenhum produto abaixo do mínimo.':'Comece cadastrando seus produtos em <b>Produtos</b>.'}</div>`}</div>`;
+  <div class="card tw" style="margin-top:16px"><h3>🔴 Repor estoque <span class="sp"></span>${baixos.length?`<button class="btn sm" onclick="copiarReposicao()">📋 Copiar lista</button> `:''}${dono()?`<button class="btn sm" onclick="go('entrada')">Lançar entrada</button>`:''}</h3>
+  ${baixos.length?`<table><tr><th>Produto</th><th class="num">Atual</th><th class="num">Mínimo</th><th class="num">Sugestão de compra</th><th>Status</th></tr>${baixos.slice(0,S.verTodosRep?9999:15).map(p=>{const s=status(p);return `<tr class="baixo"><td>${esc(p.nome)}${p.descricao?`<div style="color:var(--muted);font-size:12px">${esc(p.descricao)}</div>`:''}</td><td class="num"><b style="color:var(--bad)">${N(p.estoque)}</b></td><td class="num">${N(lim(p))}</td><td class="num">${N(Math.max(lim(p)*2-p.estoque,1))} ${esc(p.unidade)}</td><td><span class="tag ${s[1]}">${s[0]}</span></td></tr>`}).join('')}</table>${baixos.length>15&&!S.verTodosRep?`<div style="text-align:center;margin-top:10px"><button class="btn sm" onclick="S.verTodosRep=1;render()">Ver todos os ${baixos.length}</button></div>`:''}`:`<div class="empty">${S.produtos.length?'Tudo certo! Nenhum produto precisando de reposição.':'Comece cadastrando seus produtos em <b>Produtos</b>.'}</div>`}</div>`;
 };
 function finKpis(){
   const saldo=Object.values(S.saldos).reduce((s,x)=>s+x.saldo,0);
@@ -400,16 +410,16 @@ async function cancelar(id){try{await rpc('cancelar_venda',{p_venda:id});await r
 // ---- Produtos
 VIEWS.produtos=()=>`<div class="row"><div><h1>Produtos</h1><p class="sub">Cadastre seus produtos com custo, preço de venda e estoque mínimo.</p></div><span class="sp"></span><button class="btn" onclick="S.etq.qtd={};go('etiquetas')">🏷️ Etiquetas</button><button class="btn p" onclick="formProd()">+ Novo produto</button></div>
   <div class="card tw"><table><tr><th>Código</th><th>Produto</th><th>Categoria</th><th class="num">Custo</th><th class="num">Preço</th><th class="num">Margem</th><th class="num">Estoque</th><th></th></tr>
-  ${S.produtos.map(p=>{const mg=p.preco?((p.preco-p.custo)/p.preco*100):0;return `<tr><td style="color:var(--muted)">${esc(p.codigo)}</td><td><b>${esc(p.nome)}</b>${p.descricao?`<div style="color:var(--muted);font-size:12px">${esc(p.descricao)}</div>`:''}</td><td>${esc(p.categoria)}</td><td class="num">${R(p.custo)}</td><td class="num">${R(p.preco)}</td><td class="num"><span class="tag ${mg<20?'t-warn':'t-ok'}">${mg.toFixed(0)}%</span></td><td class="num">${N(p.estoque)} ${esc(p.unidade)}</td><td class="num" style="white-space:nowrap"><button class="btn sm" title="Imprimir etiqueta" onclick="S.etq.qtd={'${p.id}':1};go('etiquetas')">🏷️</button> <button class="btn sm" onclick="formProd('${p.id}')">Editar</button></td></tr>`}).join('')||'<tr><td colspan="8" class="empty">Nenhum produto cadastrado ainda</td></tr>'}</table></div>`;
+  ${S.produtos.map(p=>{const mg=p.preco?((p.preco-p.custo)/p.preco*100):0;return `<tr><td style="color:var(--muted)">${esc(p.codigo)}</td><td><b>${esc(p.nome)}</b>${p.descricao?`<div style="color:var(--muted);font-size:12px">${esc(p.descricao)}</div>`:''}</td><td>${esc(p.categoria)}</td><td class="num">${R(p.custo)}</td><td class="num">${R(p.preco)}</td><td class="num"><span class="tag ${mg<20?'t-warn':'t-ok'}">${mg.toFixed(0)}%</span></td><td class="num">${repor(p)?`<span class="tag t-bad">${N(p.estoque)} ${esc(p.unidade)}</span>`:N(p.estoque)+' '+esc(p.unidade)}</td><td class="num" style="white-space:nowrap"><button class="btn sm" title="Imprimir etiqueta" onclick="S.etq.qtd={'${p.id}':1};go('etiquetas')">🏷️</button> <button class="btn sm" onclick="formProd('${p.id}')">Editar</button></td></tr>`}).join('')||'<tr><td colspan="8" class="empty">Nenhum produto cadastrado ainda</td></tr>'}</table></div>`;
 function formProd(id){
-  const p=id?P(id):{codigo:'',nome:'',categoria:'',unidade:'un',custo:'',preco:'',minimo:5};
+  const p=id?P(id):{codigo:'',nome:'',categoria:'',unidade:'un',custo:'',preco:'',minimo:0};
   modal(`<h3>${id?'Editar':'Novo'} produto</h3><form id="fp" class="f" style="grid-template-columns:1fr 1fr">
   <div><label>Código do produto</label><input name="codigo" placeholder="Ex.: 10CM16383SG" value="${esc(p.codigo)}"></div>
   <div><label>Unidade</label><select name="unidade">${['un','kg','g','l','ml','cx','pct','m'].map(u=>`<option ${u===p.unidade?'selected':''}>${u}</option>`).join('')}</select></div>
   <div style="grid-column:span 2"><label>Nome do produto * <span style="font-weight:500">(1ª linha da etiqueta)</span></label><input name="nome" required placeholder="Ex.: UCLA CM 3.8" value="${esc(p.nome)}"></div>
   <div style="grid-column:span 2"><label>Especificação <span style="font-weight:500">(2ª linha da etiqueta)</span></label><input name="descricao" placeholder="Ex.: ALT 3 EPIKUT 16°" value="${esc(p.descricao||'')}"></div>
   <div><label>Categoria</label><input name="categoria" value="${esc(p.categoria)}"></div>
-  <div><label>Estoque mínimo</label><input name="minimo" type="number" min="0" step="any" value="${p.minimo}"></div>
+  <div><label>Estoque mínimo <span style="font-weight:500">(0 = padrão: ${CONFIG.ALERTA_ESTOQUE||10})</span></label><input name="minimo" type="number" min="0" step="any" value="${p.minimo}"></div>
   <div><label>Preço de custo (R$)</label><input name="custo" type="number" min="0" step="0.01" value="${id?(+p.custo).toFixed(2):''}"></div>
   <div><label>Preço de venda (R$) *</label><input name="preco" type="number" min="0" step="0.01" required value="${p.preco}"></div>
   ${id?'<p style="grid-column:span 2;color:var(--muted);font-size:12px">O estoque só muda por Entradas, Saídas e Vendas — assim tudo fica registrado.</p>':'<div style="grid-column:span 2"><label>Estoque inicial</label><input name="estoque" type="number" min="0" step="any" value="0"></div>'}
@@ -463,13 +473,13 @@ function lancar(form,tipo){const f=Object.fromEntries(new FormData(form));busy(f
 
 // ---- Estoque
 VIEWS.estoque=()=>{
-  const l=S.produtos.filter(p=>!S.fEst||(S.fEst==='baixo'?p.estoque<=p.minimo&&p.estoque>0:p.estoque<=0));
+  const l=S.produtos.filter(p=>!S.fEst||(S.fEst==='baixo'?repor(p):p.estoque<=0)).sort((a,b)=>S.fEst?a.estoque-b.estoque:0);const nRep=S.produtos.filter(repor).length;
   const tc=S.produtos.reduce((s,p)=>s+Math.max(p.estoque,0)*p.custo,0),tv=S.produtos.reduce((s,p)=>s+Math.max(p.estoque,0)*p.preco,0);
   return `<h1>Estoque</h1><p class="sub">Posição atual de cada produto${dono()?', valor investido e potencial de venda':''}.</p>
   ${dono()?`<div class="grid k4"><div class="card kpi"><div class="l">Itens em estoque</div><div class="v">${N(S.produtos.reduce((s,p)=>s+Math.max(p.estoque,0),0))}</div></div><div class="card kpi"><div class="l">Valor de custo</div><div class="v">${R(tc)}</div></div><div class="card kpi"><div class="l">Valor de venda</div><div class="v">${R(tv)}</div></div><div class="card kpi"><div class="l">Lucro potencial</div><div class="v" style="color:var(--ok)">${R(tv-tc)}</div></div></div>`:''}
-  <div class="card tw" style="margin-top:16px"><h3>Posição por produto <select style="width:auto" onchange="S.fEst=this.value;render()"><option value="">Todos</option><option value="baixo" ${S.fEst==='baixo'?'selected':''}>Estoque baixo</option><option value="zero" ${S.fEst==='zero'?'selected':''}>Zerados</option></select></h3>
+  <div class="card tw" style="margin-top:16px"><h3>Posição por produto <select style="width:auto" onchange="S.fEst=this.value;render()"><option value="">Todos</option><option value="baixo" ${S.fEst==='baixo'?'selected':''}>🔴 Repor (${nRep})</option><option value="zero" ${S.fEst==='zero'?'selected':''}>Zerados</option></select></h3>
   <table><tr><th>Produto</th><th class="num">Estoque</th><th class="num">Mínimo</th>${dono()?'<th class="num">Custo médio</th><th class="num">Total custo</th>':''}<th>Status</th><th></th></tr>
-  ${l.map(p=>{const s=status(p);return `<tr><td><b>${esc(p.nome)}</b><div style="color:var(--muted);font-size:12px">${esc(p.categoria)}</div></td><td class="num">${N(p.estoque)} ${esc(p.unidade)}</td><td class="num">${N(p.minimo)}</td>${dono()?`<td class="num">${R(p.custo)}</td><td class="num">${R(Math.max(p.estoque,0)*p.custo)}</td>`:''}<td><span class="tag ${s[1]}">${s[0]}</span></td><td class="num"><button class="btn sm" onclick="kardex('${p.id}')">Movimentos</button></td></tr>`}).join('')||'<tr><td colspan="7" class="empty">Nenhum produto</td></tr>'}</table></div>`;
+  ${l.map(p=>{const s=status(p),rp=repor(p);return `<tr class="${rp?'baixo':''}"><td><b>${esc(p.nome)}</b><div style="color:var(--muted);font-size:12px">${esc(p.categoria)}</div></td><td class="num">${rp?`<b style="color:var(--bad)">${N(p.estoque)}</b>`:N(p.estoque)} ${esc(p.unidade)}</td><td class="num">${N(lim(p))}</td>${dono()?`<td class="num">${R(p.custo)}</td><td class="num">${R(Math.max(p.estoque,0)*p.custo)}</td>`:''}<td><span class="tag ${s[1]}">${s[0]}</span></td><td class="num"><button class="btn sm" onclick="kardex('${p.id}')">Movimentos</button></td></tr>`}).join('')||'<tr><td colspan="7" class="empty">Nenhum produto</td></tr>'}</table></div>`;
 };
 async function kardex(id){try{const l=await q(sb.from('movimentos').select('*').eq('produto_id',id).order('data',{ascending:false}).limit(100));modal(`<h3>Movimentos — ${esc(P(id).nome)}</h3><div class="tw">${tabMov(l)}</div><div class="row" style="margin-top:14px"><span class="sp"></span><button class="btn p" onclick="fechar()">Fechar</button></div>`)}catch(e){erro(e)}}
 
@@ -674,7 +684,15 @@ function formCad(tab,id,rapido){
   const c=CAD[tab],x=id?S[tab].find(y=>y.id===id):{};
   modal(`<h3>${id?'Editar':'Novo'} ${c.um}</h3><form id="fc" class="f" style="grid-template-columns:1fr 1fr">${c.campos.map(([k,l,w])=>`<div ${w?'style="grid-column:span 2"':''}><label>${l}</label><input name="${k}" value="${esc(x[k]||'')}" ${k==='nome'?'required':''} ${k==='email'?'type="email"':''}></div>`).join('')}
   <div class="row" style="grid-column:span 2">${id?`<button type="button" class="btn d" onclick="fechar();confirmar('Excluir este ${c.um}? O histórico é mantido.',()=>delCad('${tab}','${id}'))">Excluir</button>`:''}<span class="sp"></span><button type="button" class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bc">Salvar</button></div></form>`);
+  let forcar=false;
+  const avisar=()=>{const f=Object.fromEntries(new FormData($('#fc')));const d=dupCad(tab,f,id);let box=$('#dupbox');
+    if(!d.length){if(box)box.remove();forcar=false;$('#bc').textContent='Salvar';return d}
+    if(!box){box=document.createElement('div');box.id='dupbox';box.style.gridColumn='span 2';$('#fc').lastElementChild.before(box)}
+    box.innerHTML=`<div class="dupav"><b>⚠️ Parece que este ${c.um} já está cadastrado:</b>${d.slice(0,3).map(([y,m])=>`<div>• <b>${esc(y.nome)}</b>${y.telefone?' · '+esc(y.telefone):''}${y.documento?' · '+esc(y.documento):''} <span style="color:var(--muted)">(${m})</span> <a href="#" onclick="fechar();formCad('${tab}','${y.id}');return false">abrir</a></div>`).join('')}<div style="color:var(--muted);font-size:12px;margin-top:4px">Se for outra pessoa, toque em "Salvar mesmo assim".</div></div>`;
+    $('#bc').textContent='Salvar mesmo assim';return d};
+  ['nome','documento','telefone'].forEach(k=>{const el=$('#fc [name='+k+']');if(el)el.addEventListener('change',avisar)});
   $('#fc').onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));Object.keys(f).forEach(k=>f[k]=f[k].trim()||null);
+    if(!forcar&&avisar().length){forcar=true;return}
     busy($('#bc'),async()=>{
       let nid=id;
       if(id)await q(sb.from(tab).update(f).eq('id',id));
@@ -686,6 +704,15 @@ function formCad(tab,id,rapido){
     });
   };
 }
+const semAc=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\b(ltda|me|epp|eireli|s\/?a)\b/g,'').replace(/[^a-z0-9]/g,'');
+function dupCad(tab,f,id){
+  const nm=semAc(f.nome),doc=String(f.documento||'').replace(/\D/g,''),tels=String(f.telefone||'').split(/[\/;,]/).map(x=>x.replace(/\D/g,'').slice(-8)).filter(x=>x.length===8);
+  const r=[];S[tab].forEach(y=>{if(y.id===id)return;
+    const ydoc=String(y.documento||'').replace(/\D/g,''),ytel=String(y.telefone||'').split(/[\/;,]/).map(x=>x.replace(/\D/g,'').slice(-8));
+    if(doc.length>=11&&ydoc===doc)r.push([y,'mesmo CPF/CNPJ']);
+    else if(tels.some(t=>ytel.includes(t)))r.push([y,'mesmo telefone']);
+    else if(nm.length>=4&&semAc(y.nome)===nm)r.push([y,'mesmo nome'])});
+  return r}
 async function delCad(tab,id){try{await q(sb.from(tab).update({ativo:false}).eq('id',id));await recarregar();toast('Excluído');render()}catch(e){erro(e)}}
 async function histCli(id){
   try{
