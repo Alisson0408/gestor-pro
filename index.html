@@ -414,7 +414,7 @@ async function cupom(id){
   modal(`<h3>🧾 Venda #${v.numero} ${v.cancelada?'<span class="tag t-bad">Cancelada</span>':'<span class="tag t-ok">Concluída</span>'}</h3><p style="color:var(--muted);margin-bottom:10px">${D(v.data)} · ${esc(v.pagamento)}${v.cliente?' · '+esc(v.cliente):''}${v.paciente?'<br>Paciente: <b>'+esc(v.paciente)+'</b>':''}${v.ficha?' · Ficha '+esc(v.ficha):''}</p>
   <div class="tw"><table><tr><th>Item</th><th class="num">Qtd</th><th class="num">Unit.</th><th class="num">Total</th></tr>${v.itens.map(i=>`<tr><td>${esc(i.nome)}</td><td class="num">${N(i.qtd)}</td><td class="num">${R(i.preco)}</td><td class="num">${R(i.qtd*i.preco)}</td></tr>`).join('')}</table></div>
   <div class="row" style="margin-top:12px"><span class="sp"></span><div style="text-align:right">${v.desconto?`<div style="color:var(--muted)">Desconto: −${R(v.desconto)}</div>`:''}<div class="total" style="margin:4px 0">${R(v.total)}</div></div></div>
-  <div class="row">${!v.cancelada&&dono()?`<button class="btn d" onclick="fechar();confirmar('Cancelar a venda #${v.numero}? Os produtos voltam para o estoque.',()=>cancelar('${v.id}'))">Cancelar venda</button>`:''}<button class="btn" onclick="copiarCupom('${v.id}')">📋 Copiar p/ WhatsApp</button><span class="sp"></span><button class="btn p" onclick="fechar()">Fechar</button></div>`);
+  <div class="row">${!v.cancelada&&dono()?`<button class="btn d" onclick="fechar();confirmar('Cancelar a venda #${v.numero}? Os produtos voltam para o estoque.',()=>cancelar('${v.id}'))">Cancelar venda</button>`:''}<button class="btn" onclick="copiarCupom('${v.id}')">📋 Copiar p/ WhatsApp</button><button class="btn" onclick="fechar();relFicha('${v.id}')">📄 Relatório / PDF</button><span class="sp"></span><button class="btn p" onclick="fechar()">Fechar</button></div>`);
   S._cupom=v;
 }
 function copiarCupom(){const v=S._cupom;const t=`*${S.empresa.nome}*\nVenda #${v.numero} — ${D(v.data)}\n\n${v.itens.map(i=>`${N(i.qtd)}x ${i.nome} — ${R(i.qtd*i.preco)}`).join('\n')}\n${v.desconto?'\nDesconto: -'+R(v.desconto):''}\n*Total: ${R(v.total)}*\nPagamento: ${v.pagamento}\n\nObrigado pela preferência!`;navigator.clipboard.writeText(t).then(()=>toast('Cupom copiado! Cole no WhatsApp do cliente.'),()=>toast('Não foi possível copiar',1))}
@@ -683,7 +683,7 @@ VIEWS.historico=async()=>{
   <div class="grid k4" style="margin-top:16px"><div class="card kpi"><div class="l">Vendas</div><div class="v">${at.length}</div></div><div class="card kpi"><div class="l">Faturamento</div><div class="v">${R(fat)}</div></div>${dono()?`<div class="card kpi"><div class="l">Custo mercadorias</div><div class="v">${R(cmv)}</div></div><div class="card kpi"><div class="l">Lucro bruto</div><div class="v" style="color:var(--ok)">${R(fat-cmv)}</div></div>`:''}</div>
   <div class="card" style="margin-top:16px"><h3>Por forma de pagamento</h3><div class="row">${Object.entries(porPg).map(([k,v])=>`<span class="tag t-blue" style="padding:8px 12px">${esc(k)}: ${R(v)}</span>`).join('')||'<span style="color:var(--muted)">—</span>'}</div></div>
   <div class="card tw" style="margin-top:16px"><table><tr><th>#</th><th>Data</th><th>Cliente</th><th>Pagamento</th><th class="num">Itens</th><th class="num">Total</th><th></th></tr>
-  ${vs.map(v=>`<tr style="${v.cancelada?'opacity:.5':''}"><td>${v.numero}</td><td>${D(v.data)}</td><td>${esc(v.cliente||'—')}${v.paciente?`<div style="color:var(--muted);font-size:12px">Pac.: ${esc(v.paciente)}${v.ficha?' · '+esc(v.ficha):''}</div>`:''}</td><td>${esc(v.pagamento)}</td><td class="num">${N(v.itens.reduce((s,i)=>s+i.qtd,0))}</td><td class="num"><b>${R(v.total)}</b>${v.cancelada?' <span class="tag t-bad">cancelada</span>':''}</td><td class="num"><button class="btn sm" onclick="cupomHist('${v.id}')">Ver</button></td></tr>`).join('')||'<tr><td colspan="7" class="empty">Nenhuma venda no período</td></tr>'}</table></div>`;
+  ${vs.map(v=>`<tr style="${v.cancelada?'opacity:.5':''}"><td>${v.numero}</td><td>${D(v.data)}</td><td>${esc(v.cliente||'—')}${v.paciente?`<div style="color:var(--muted);font-size:12px">Pac.: ${esc(v.paciente)}${v.ficha?' · '+esc(v.ficha):''}</div>`:''}</td><td>${esc(v.pagamento)}</td><td class="num">${N(v.itens.reduce((s,i)=>s+i.qtd,0))}</td><td class="num"><b>${R(v.total)}</b>${v.cancelada?' <span class="tag t-bad">cancelada</span>':''}</td><td class="num" style="white-space:nowrap"><button class="btn sm" onclick="cupomHist('${v.id}')">Ver</button> <button class="btn sm" title="Relatório deste serviço (PDF)" onclick="relFicha('${v.id}')">📄</button></td></tr>`).join('')||'<tr><td colspan="7" class="empty">Nenhuma venda no período</td></tr>'}</table></div>`;
 };
 // ---- Serviços executados (extrato mensal por cliente)
 const mesAtual=()=>{const t=today();return [t.slice(0,8)+'01',(()=>{const d=new Date(+t.slice(0,4),+t.slice(5,7),0);return t.slice(0,8)+String(d.getDate()).padStart(2,'0')})()]};
@@ -746,12 +746,67 @@ async function relServ(cid){
 }
 function txtRelServ(){const r=S._rsDoc,F=S.rs,dt=x=>new Date(x+'T12:00').toLocaleDateString('pt-BR');return `*${r.emp.nome}*\nServiços executados de ${dt(F.de)} a ${dt(F.ate)}\nCliente: ${r.c.nome}\n\n${r.ln.map(l=>`• ${N(l.qtd)}x ${l.desc}${l.pac?' — Pac. '+l.pac:''} — ${R(l.valor)}`).join('\n')}\n\n*Total: ${R(r.total)}*\nPagamentos no período: ${R(r.pago)}\nDiferença: ${R(r.pago-r.total)}\n\nSegue o relatório em PDF. Qualquer dúvida estamos à disposição!`}
 function copiarRelServ(){navigator.clipboard.writeText(txtRelServ()).then(()=>toast('Resumo copiado!'),()=>toast('Não foi possível copiar',1))}
-function imprimirRelServ(){
+function imprimirDoc(html,titulo){
   let area=$('#printArea');if(!area){area=document.createElement('div');area.id='printArea';document.body.appendChild(area)}
   let css=$('#pagecss');if(!css){css=document.createElement('style');css.id='pagecss';document.head.appendChild(css)}
-  css.textContent='@page{size:A4;margin:12mm}';area.innerHTML=S._rsDoc.doc;
-  const t=document.title;document.title='Servicos executados - '+S._rsDoc.c.nome;
+  css.textContent='@page{size:A4;margin:12mm}';area.innerHTML=html;
+  const t=document.title;document.title=titulo;
   setTimeout(()=>{try{window.print()}catch(e){toast('Não foi possível abrir a impressão',1)}document.title=t},300);
+}
+function imprimirRelServ(){imprimirDoc(S._rsDoc.doc,'Servicos executados - '+S._rsDoc.c.nome)}
+// ---- Relatório de um serviço (ficha)
+async function relFicha(id){
+  let v;try{v=normVenda((await q(sb.from('vendas').select('*,venda_itens(*)').eq('id',id)))[0])}catch(e){return erro(e)}
+  if(!v)return toast('Venda não encontrada',1);
+  const emp=await empDados(),c=S.clientes.find(x=>x.id===v.cliente_id)||{nome:v.cliente||'Consumidor'};
+  const dt=x=>x?new Date(String(x).length===10?x+'T12:00':x).toLocaleDateString('pt-BR'):'—';
+  const doc=`<div class="rsdoc">
+    <div class="rs-h"><div><div class="rs-emp">${esc(emp.nome)}</div><div class="rs-sub">${[emp.endereco,emp.telefone||emp.whatsapp,emp.documento?'CNPJ '+emp.documento:''].filter(Boolean).map(esc).join(' · ')}</div></div><div class="rs-tit">Relatório de Serviço<div class="rs-sub">${v.ficha?'Ficha '+esc(v.ficha)+' · ':''}Venda #${v.numero}</div></div></div>
+    ${v.cancelada?'<div style="background:#fdecec;color:#c0392b;font-weight:700;padding:6px 8px;margin-bottom:8px;border-radius:4px">SERVIÇO CANCELADO</div>':''}
+    <table class="rs-t" style="margin-bottom:10px"><tbody>
+      <tr><td style="width:22%"><b>Cliente</b></td><td>${esc(c.nome)}${c.telefone?' · '+esc(c.telefone):''}</td></tr>
+      ${c.endereco?`<tr><td><b>Endereço</b></td><td>${esc(c.endereco)}</td></tr>`:''}
+      <tr><td><b>Paciente</b></td><td>${esc(v.paciente||'—')}</td></tr>
+      <tr><td><b>Ficha / OS</b></td><td>${esc(v.ficha||'—')}</td></tr>
+      <tr><td><b>Entrada</b></td><td>${dt(v.data_entrada)}</td></tr>
+      <tr><td><b>Finalizado</b></td><td>${dt(v.data)}</td></tr>
+    </tbody></table>
+    <table class="rs-t"><thead><tr><th>Qtd</th><th>Descrição do serviço</th><th class="n">Valor unit.</th><th class="n">Total</th></tr></thead><tbody>
+      ${v.itens.map(i=>{const pr=S.produtos.find(p=>p.id===i.produto_id);return `<tr><td>${N(i.qtd)}</td><td>${esc(i.nome)}${pr&&pr.descricao?' '+esc(pr.descricao):''}</td><td class="n">${R(i.preco)}</td><td class="n">${R(i.qtd*i.preco)}</td></tr>`}).join('')}
+    </tbody></table>
+    <div class="rs-tot">
+      <div><span>Subtotal:</span><b>${R(v.bruto)}</b></div>
+      ${v.desconto?`<div><span>Desconto:</span><b>−${R(v.desconto)}</b></div>`:''}
+      <div class="rs-dif"><span>Total:</span><b>${R(v.total)}</b></div>
+      <div><span>Pagamento:</span><b>${esc(v.pagamento||'—')}</b></div>
+    </div>
+    <div style="margin-top:34px;display:flex;gap:40px"><div style="flex:1;border-top:1px solid #1d2433;padding-top:4px;text-align:center;font-size:11px">${esc(emp.nome)}</div><div style="flex:1;border-top:1px solid #1d2433;padding-top:4px;text-align:center;font-size:11px">Recebido por</div></div>
+    <div class="rs-rod">Emitido em ${new Date().toLocaleDateString('pt-BR')} · ${esc(emp.nome)}</div>
+  </div>`;
+  const txt=`*${emp.nome}*\nRelatório de serviço${v.ficha?' — Ficha '+v.ficha:''}\nCliente: ${c.nome}${v.paciente?'\nPaciente: '+v.paciente:''}\nEntrada: ${dt(v.data_entrada)} · Finalizado: ${dt(v.data)}\n\n${v.itens.map(i=>`• ${N(i.qtd)}x ${i.nome} — ${R(i.qtd*i.preco)}`).join('\n')}${v.desconto?'\nDesconto: -'+R(v.desconto):''}\n*Total: ${R(v.total)}*\n\nSegue o relatório em PDF.`;
+  S._rfDoc={doc,txt,titulo:'Relatorio de servico - '+(v.ficha||('venda '+v.numero))+' - '+c.nome};
+  const w=waLink(c.telefone);
+  modal(`<div style="max-height:70vh;overflow:auto;background:#fff;border-radius:10px;padding:6px">${doc}</div>
+  <div class="row" style="margin-top:12px"><button class="btn" onclick="fechar()">Fechar</button><span class="sp"></span><button class="btn" onclick="navigator.clipboard.writeText(S._rfDoc.txt).then(()=>toast('Resumo copiado!'),()=>toast('Não foi possível copiar',1))">📋 Copiar resumo</button>${w?`<a class="btn" style="text-decoration:none" target="_blank" href="${w}?text=${encodeURIComponent(txt)}">📲 WhatsApp</a>`:''}<button class="btn p" onclick="imprimirDoc(S._rfDoc.doc,S._rfDoc.titulo)">🖨️ Imprimir / PDF</button></div>`);
+}
+// ---- Relatório de um cliente em qualquer período
+function relCliPeriodo(cid){
+  const [d0,d1]=mesAtual(),y=today().slice(0,4),mAnt=(()=>{const d=new Date(d0+'T12:00');d.setMonth(d.getMonth()-1);const a=d.toISOString().slice(0,8);return [a+'01',a+String(new Date(d.getFullYear(),d.getMonth()+1,0).getDate()).padStart(2,'0')]})();
+  modal(`<h3>📑 Relatório de serviços — ${esc(nomeCli(cid))}</h3><p style="color:var(--muted);margin-bottom:12px">Escolha o período e gere o relatório para imprimir em PDF ou mandar pelo WhatsApp.</p>
+  <div class="row" style="margin-bottom:10px">${[['Este mês',d0,d1],['Mês anterior',...mAnt],['Este ano',y+'-01-01',y+'-12-31'],['Ano passado',(y-1)+'-01-01',(y-1)+'-12-31']].map(([l,a,b])=>`<button class="btn sm" onclick="$('#rpde').value='${a}';$('#rpate').value='${b}'">${l}</button>`).join('')}</div>
+  <div class="f"><div><label>De</label><input type="date" id="rpde" value="${d0}"></div><div><label>Até</label><input type="date" id="rpate" value="${d1}"></div></div>
+  <div class="row" style="margin-top:14px"><span class="sp"></span><button class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="brp" onclick="gerarRelCli('${cid}')">Gerar relatório</button></div>`);
+}
+async function gerarRelCli(cid){
+  const de=$('#rpde').value,ate=$('#rpate').value;if(!de||!ate||de>ate)return toast('Confira as datas',1);
+  busy($('#brp'),async()=>{
+    const E=S.empresa.id;
+    const vs=await q(sb.from('vendas').select('id,numero,data,total,desconto,cliente_id,paciente,ficha,data_entrada,venda_itens(nome,qtd,preco,produto_id)').eq('empresa_id',E).eq('cliente_id',cid).eq('cancelada',false).gte('data',iniDia(de)).lte('data',fimDia(ate)).order('data'));
+    const pg=await q(sb.from('lancamentos').select('cliente_id,valor,data_pagamento').eq('empresa_id',E).eq('cliente_id',cid).eq('tipo','receber').eq('pago',true).gte('data_pagamento',de).lte('data_pagamento',ate));
+    const ab=await q(sb.from('lancamentos').select('cliente_id,valor').eq('empresa_id',E).eq('cliente_id',cid).eq('tipo','receber').eq('pago',false));
+    S.rs=S.rs||{cli:'',de:'',ate:''};S.rs.de=de;S.rs.ate=ate;S._rs={vs,pg,ab};
+    await relServ(cid);
+  });
 }
 async function formCabecalho(){const e=await empDados();
   modal(`<h3>🏢 Dados do cabeçalho do relatório</h3><p style="color:var(--muted);margin-bottom:12px">Aparecem no topo do relatório de serviços executados.</p>
@@ -937,7 +992,7 @@ function viewCad(tab){
   return `<div class="row"><div><h1>${c.tit}</h1><p class="sub">${c.sub}</p></div><span class="sp"></span>${podeEditar?`<button class="btn p" onclick="formCad('${tab}')">+ Novo ${c.um}</button>`:''}</div>
   <div class="card tw"><input placeholder="🔎 Buscar por nome, documento ou telefone..." value="${esc(S.buscaCad)}" oninput="S.buscaCad=this.value;S._refocus='bcad';render()" id="bcad" style="margin-bottom:12px">
   <table><tr><th>Nome</th><th>Documento</th><th>Telefone</th>${dono()?`<th class="num">${tab==='clientes'?'A receber':'A pagar'}</th>`:''}<th></th></tr>
-  ${l.map(x=>{const w=waLink(x.telefone);const ab=dono()?aberto(x.id):0;return `<tr><td><b>${esc(x.nome)}</b>${x.contato?`<div style="color:var(--muted);font-size:12px">${esc(x.contato)}</div>`:''}${x.obs?`<div style="color:var(--muted);font-size:11px">${esc(x.obs)}</div>`:''}${x.email?`<div style="color:var(--muted);font-size:12px">${esc(x.email)}</div>`:''}</td><td>${esc(x.documento||'—')}</td><td>${x.telefone?(w?`<a href="${w}" target="_blank" rel="noopener">💬 ${esc(x.telefone)}</a>`:esc(x.telefone)):'—'}</td>${dono()?`<td class="num">${ab?`<span class="tag ${tab==='clientes'?'t-warn':'t-bad'}">${R(ab)}</span>`:'—'}</td>`:''}<td class="num" style="white-space:nowrap">${tab==='clientes'?`<button class="btn sm" onclick="histCli('${x.id}')">Compras</button> `:''}${podeEditar?`<button class="btn sm" onclick="formCad('${tab}','${x.id}')">Editar</button>`:''}</td></tr>`}).join('')||`<tr><td colspan="5" class="empty">Nenhum ${c.um} ${b?'encontrado':'cadastrado ainda'}</td></tr>`}</table></div>`;
+  ${l.map(x=>{const w=waLink(x.telefone);const ab=dono()?aberto(x.id):0;return `<tr><td><b>${esc(x.nome)}</b>${x.contato?`<div style="color:var(--muted);font-size:12px">${esc(x.contato)}</div>`:''}${x.obs?`<div style="color:var(--muted);font-size:11px">${esc(x.obs)}</div>`:''}${x.email?`<div style="color:var(--muted);font-size:12px">${esc(x.email)}</div>`:''}</td><td>${esc(x.documento||'—')}</td><td>${x.telefone?(w?`<a href="${w}" target="_blank" rel="noopener">💬 ${esc(x.telefone)}</a>`:esc(x.telefone)):'—'}</td>${dono()?`<td class="num">${ab?`<span class="tag ${tab==='clientes'?'t-warn':'t-bad'}">${R(ab)}</span>`:'—'}</td>`:''}<td class="num" style="white-space:nowrap">${tab==='clientes'?`<button class="btn sm" onclick="histCli('${x.id}')">Compras</button> <button class="btn sm" onclick="relCliPeriodo('${x.id}')">📑 Relatório</button> `:''}${podeEditar?`<button class="btn sm" onclick="formCad('${tab}','${x.id}')">Editar</button>`:''}</td></tr>`}).join('')||`<tr><td colspan="5" class="empty">Nenhum ${c.um} ${b?'encontrado':'cadastrado ainda'}</td></tr>`}</table></div>`;
 }
 VIEWS.clientes=()=>viewCad('clientes');
 VIEWS.fornecedores=()=>viewCad('fornecedores');
@@ -975,8 +1030,8 @@ async function histCli(id){
     const vs=(await q(sb.from('vendas').select('*,venda_itens(*)').eq('cliente_id',id).order('data',{ascending:false}).limit(100))).map(normVenda);
     const at=vs.filter(v=>!v.cancelada);const ab=S.abertos.filter(a=>a.cliente_id===id);
     modal(`<h3>👤 ${esc(nomeCli(id))}</h3><div class="row" style="margin:6px 0 14px"><span class="tag t-blue" style="padding:7px 11px">${at.length} compra(s)</span><span class="tag t-ok" style="padding:7px 11px">Total ${R(at.reduce((s,v)=>s+v.total,0))}</span>${dono()&&ab.length?`<span class="tag t-warn" style="padding:7px 11px">Fiado em aberto ${R(ab.reduce((s,a)=>s+a.valor,0))}</span>`:''}</div>
-    <div class="tw"><table><tr><th>#</th><th>Data</th><th>Pagamento</th><th class="num">Total</th></tr>${vs.map(v=>`<tr style="${v.cancelada?'opacity:.5':''}"><td>${v.numero}</td><td>${D(v.data)}</td><td>${esc(v.pagamento)}</td><td class="num">${R(v.total)}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">Nenhuma compra ainda</td></tr>'}</table></div>
-    <div class="row" style="margin-top:14px"><span class="sp"></span><button class="btn p" onclick="fechar()">Fechar</button></div>`);
+    <div class="tw" style="max-height:55vh;overflow:auto"><table><tr><th>#</th><th>Data</th><th>Ficha / Paciente</th><th>Pagamento</th><th class="num">Total</th><th></th></tr>${vs.map(v=>`<tr style="${v.cancelada?'opacity:.5':''}"><td>${v.numero}</td><td>${D(v.data)}</td><td>${esc(v.ficha||'—')}${v.paciente?`<div style="color:var(--muted);font-size:12px">${esc(v.paciente)}</div>`:''}</td><td>${esc(v.pagamento)}</td><td class="num">${R(v.total)}</td><td class="num"><button class="btn sm" title="Relatório deste serviço (PDF)" onclick="relFicha('${v.id}')">📄</button></td></tr>`).join('')||'<tr><td colspan="6" class="empty">Nenhuma compra ainda</td></tr>'}</table></div>
+    <div class="row" style="margin-top:14px"><button class="btn" onclick="relCliPeriodo('${id}')">📑 Relatório do período</button><span class="sp"></span><button class="btn p" onclick="fechar()">Fechar</button></div>`);
   }catch(e){erro(e)}
 }
 
