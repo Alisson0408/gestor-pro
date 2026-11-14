@@ -311,11 +311,12 @@ function banner(){
   return '';
 }
 const lim=p=>p.minimo>0?p.minimo:(+CONFIG.ALERTA_ESTOQUE||10);
-const repor=p=>p.ativo!==false&&p.estoque<=lim(p);
-const status=p=>p.estoque<=0?['Zerado','t-bad']:repor(p)?['Repor','t-bad']:['OK','t-ok'];
+const servico=p=>/^servi[cç]o/i.test(String(p.categoria||'').trim()); // serviços (próteses etc.) não controlam estoque
+const repor=p=>!servico(p)&&p.ativo!==false&&p.estoque<=lim(p);
+const status=p=>servico(p)?['Serviço','t-ok']:p.estoque<=0?['Zerado','t-bad']:repor(p)?['Repor','t-bad']:['OK','t-ok'];
 function badgeEstoque(){const b=document.querySelector('#nav button[data-v=estoque]');if(!b)return;let i=b.querySelector('.bdg');const n=S.produtos.filter(repor).length;if(!n){if(i)i.remove();return}if(!i){i=document.createElement('span');i.className='bdg';b.appendChild(i)}i.textContent=n}
 function copiarReposicao(){const l=S.produtos.filter(repor).sort((a,b)=>a.estoque-b.estoque);const t=`*Lista de reposição — ${S.empresa.nome}*\n${new Date().toLocaleDateString('pt-BR')}\n\n${l.map(p=>`• ${p.nome}${p.descricao?' '+p.descricao:''} — tem ${N(p.estoque)}, comprar ${N(Math.max(lim(p)*2-p.estoque,1))} ${p.unidade}`).join('\n')}`;navigator.clipboard.writeText(t).then(()=>toast('Lista copiada! Cole no WhatsApp do fornecedor.'),()=>toast('Não foi possível copiar',1))}
-const opts=()=>S.produtos.map(p=>`<option value="${p.id}">${esc(p.nome)} — estoque: ${N(p.estoque)}</option>`).join('');
+const opts=()=>S.produtos.filter(p=>!servico(p)).map(p=>`<option value="${p.id}">${esc(p.nome)} — estoque: ${N(p.estoque)}</option>`).join('');
 const lucroDe=vs=>vs.reduce((s,v)=>s+v.total-v.itens.reduce((a,i)=>a+i.qtd*i.custo,0),0);
 
 // ---- Painel
@@ -368,7 +369,7 @@ VIEWS.pdv=()=>{
   return `<h1>Vender (PDV)</h1><p class="sub">Toque nos produtos ou digite/bipe o código de barras e aperte Enter.</p>
   <div class="pdv">
     <div class="card"><input id="bp" placeholder="🔎 Buscar por nome ou código..." value="${esc(S.busca)}" oninput="S.busca=this.value;S._refocus='bp';render()" onkeydown="if(event.key==='Enter'){const p=S.produtos.find(x=>(x.codigo||'')===this.value.trim());if(p){add(p.id);S.busca='';render()}}" style="margin-bottom:14px">
-    <div class="prods">${lista.map(p=>`<div class="pc ${p.estoque<=0?'off':''}" onclick="add('${p.id}')"><div class="n">${esc(p.nome)}${p.descricao?`<div style="font-weight:500;font-size:11px;color:var(--muted)">${esc(p.descricao)}</div>`:''}</div><div class="p">${R(p.preco)}</div><div class="s">Estoque: ${N(p.estoque)} ${esc(p.unidade)}</div></div>`).join('')||'<div class="empty">Nenhum produto</div>'}</div></div>
+    <div class="prods">${lista.map(p=>`<div class="pc ${p.estoque<=0&&!servico(p)?'off':''}" onclick="add('${p.id}')"><div class="n">${esc(p.nome)}${p.descricao?`<div style="font-weight:500;font-size:11px;color:var(--muted)">${esc(p.descricao)}</div>`:''}</div><div class="p">${R(p.preco)}</div><div class="s">Estoque: ${N(p.estoque)} ${esc(p.unidade)}</div></div>`).join('')||'<div class="empty">Nenhum produto</div>'}</div></div>
     <div class="card cart"><h3>Carrinho <span class="tag t-blue">${N(S.cart.reduce((s,i)=>s+i.qtd,0))} itens</span></h3>
       ${S.cart.length?S.cart.map((i,ix)=>`<div class="it"><div class="n">${esc(i.nome)}<div style="color:var(--muted);font-size:12px;font-weight:500">${R(i.preco)} cada</div></div><div class="qty"><button onclick="qt(${ix},-1)">−</button><b style="min-width:22px;text-align:center">${N(i.qtd)}</b><button onclick="qt(${ix},1)">+</button></div><b style="min-width:80px;text-align:right">${R(i.qtd*i.preco)}</b></div>`).join(''):'<div class="empty">Carrinho vazio</div>'}
       <div class="f" style="grid-template-columns:1fr 1fr;margin-top:14px">
@@ -383,8 +384,8 @@ VIEWS.pdv=()=>{
     </div>
   </div>`;
 };
-function add(id){const p=P(id);const i=S.cart.find(x=>x.produto_id===id);const qn=(i?i.qtd:0)+1;if(qn>p.estoque)return toast('Sem estoque suficiente de '+p.nome,1);if(i)i.qtd++;else S.cart.push({produto_id:id,nome:p.nome,qtd:1,preco:p.preco});S._focus=0;render()}
-function qt(ix,d){const i=S.cart[ix];const p=P(i.produto_id);i.qtd+=d;if(p&&i.qtd>p.estoque){i.qtd=p.estoque;toast('Limite do estoque',1)}if(i.qtd<=0)S.cart.splice(ix,1);S._focus=0;render()}
+function add(id){const p=P(id);const i=S.cart.find(x=>x.produto_id===id);const qn=(i?i.qtd:0)+1;if(!servico(p)&&qn>p.estoque)return toast('Sem estoque suficiente de '+p.nome,1);if(i)i.qtd++;else S.cart.push({produto_id:id,nome:p.nome,qtd:1,preco:p.preco});S._focus=0;render()}
+function qt(ix,d){const i=S.cart[ix];const p=P(i.produto_id);i.qtd+=d;if(p&&!servico(p)&&i.qtd>p.estoque){i.qtd=p.estoque;toast('Limite do estoque',1)}if(i.qtd<=0)S.cart.splice(ix,1);S._focus=0;render()}
 function finalizar(b){
   if(!S.cart.length)return toast('Carrinho vazio',1);
   busy(b,async()=>{
@@ -440,7 +441,8 @@ const tipoTag={entrada:['Entrada','t-ok'],saida:['Saída','t-bad'],venda:['Venda
 function tabMov(l){return l.length?`<table><tr><th>Data</th><th>Tipo</th><th>Produto</th><th class="num">Qtd</th><th class="num">Valor unit.</th><th>Obs.</th></tr>${l.map(m=>{const t=tipoTag[m.tipo];const nome=m.produtos?m.produtos.nome:(P(m.produto_id)||{}).nome;return `<tr><td>${D(m.data)}</td><td><span class="tag ${t[1]}">${t[0]}</span></td><td>${nome?esc(nome):'<i>excluído</i>'}</td><td class="num">${m.tipo==='entrada'?'+':'−'}${N(m.qtd)}</td><td class="num">${R(m.valor)}</td><td style="color:var(--muted)">${esc(m.obs||'')}${m.fornecedor_id&&nomeForn(m.fornecedor_id)?' · 🚚 '+esc(nomeForn(m.fornecedor_id)):''}</td></tr>`}).join('')}</table>`:'<div class="empty">Nada registrado ainda</div>'}
 const ultMovs=tipo=>q(sb.from('movimentos').select('*,produtos(nome)').eq('empresa_id',S.empresa.id).eq('tipo',tipo).order('data',{ascending:false}).limit(15));
 VIEWS.entrada=async()=>{const ult=await ultMovs('entrada');return `<h1>Entrada de mercadoria</h1><p class="sub">Registre compras e reposições. O custo médio é recalculado automaticamente.</p>
-  <div class="card"><form id="fe" class="f" onsubmit="event.preventDefault();lancar(this,'entrada')">
+  <div class="card" style="margin-bottom:16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap"><div style="flex:1;min-width:220px"><b>📄 Comprou com nota fiscal?</b><div style="color:var(--muted);font-size:13px;margin-top:2px">Importe o XML da NF-e: fornecedor, itens, custos e parcelas entram sozinhos.</div></div><label class="btn p" style="cursor:pointer">Importar XML da NF-e<input type="file" accept=".xml,text/xml,application/xml" style="display:none" onchange="abrirXML(this)"></label></div>
+  <div class="card"><h3 style="margin-bottom:10px">Compra sem nota / lançamento manual</h3><form id="fe" class="f" onsubmit="event.preventDefault();lancar(this,'entrada')">
     <div class="c2"><label>Produto</label><select name="p" required>${opts()}</select></div>
     <div><label>Quantidade</label><input name="q" type="number" min="0.001" step="any" required></div>
     <div><label>Custo unitário (R$)</label><input name="c" type="number" min="0" step="0.01" placeholder="Opcional"></div>
@@ -471,12 +473,86 @@ function lancar(form,tipo){const f=Object.fromEntries(new FormData(form));busy(f
     modal(`<h3>🏷️ Imprimir etiquetas?</h3><p style="color:var(--muted);margin:8px 0 16px">Entraram <b style="color:var(--text)">${qn}</b> unidade(s) de <b style="color:var(--text)">${esc(pr.nome)}</b>. Quer imprimir uma etiqueta para cada?</p><div class="row"><span class="sp"></span><button class="btn" onclick="fechar()">Agora não</button><button class="btn p" onclick="fechar();S.etq.qtd={'${pr.id}':${qn}};go('etiquetas')">Imprimir ${qn} etiqueta(s)</button></div>`)}
 })}
 
+// ---- Importar XML de NF-e (entrada de compras)
+const soDig=v=>String(v||'').replace(/\D/g,'');
+const fmtDoc=v=>{const d=soDig(v);return d.length===14?d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,'$1.$2.$3/$4-$5'):d.length===11?d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/,'$1.$2.$3-$4'):(v||'')};
+const fmtFone=v=>{const d=soDig(v);return d.length===10?d.replace(/^(\d{2})(\d{4})(\d{4})$/,'($1) $2-$3'):d.length===11?d.replace(/^(\d{2})(\d{5})(\d{4})$/,'($1) $2-$3'):(v||'')};
+const normTxt=v=>String(v||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim().toUpperCase();
+const UNID_NFE=u=>{u=normTxt(u);if(/^(KG|KGS|QUILO)/.test(u))return 'kg';if(/^(G|GR|GRAMA)/.test(u))return 'g';if(/^(L|LT|LITRO)/.test(u))return 'l';if(/^ML/.test(u))return 'ml';if(/^(CX|CAIXA)/.test(u))return 'cx';if(/^(PCT|PT|PACOTE)/.test(u))return 'pct';if(/^(M|MT|METRO)$/.test(u))return 'm';return 'un'};
+function lerNFe(txt){
+  const x=new DOMParser().parseFromString(txt,'application/xml');
+  if(x.getElementsByTagName('parsererror').length)throw new Error('Arquivo XML inválido ou corrompido');
+  const tag=(el,t)=>el?el.getElementsByTagName(t)[0]:null,g=(el,t)=>{const n=tag(el,t);return n?n.textContent.trim():''};
+  const inf=x.getElementsByTagName('infNFe')[0];
+  if(!inf)throw new Error('Este XML não é de uma NF-e (nota de produto). Notas de serviço (NFS-e) não dão entrada no estoque.');
+  const ide=tag(inf,'ide'),emit=tag(inf,'emit'),en=tag(emit,'enderEmit'),tot=tag(inf,'ICMSTot');
+  const itens=[...inf.getElementsByTagName('det')].map(d=>{const p=tag(d,'prod');return {codigo:g(p,'cProd'),nome:g(p,'xProd'),unidade:UNID_NFE(g(p,'uCom')),uCom:g(p,'uCom'),qtd:+g(p,'qCom')||0,custo:+g(p,'vUnCom')||0,total:+g(p,'vProd')||0,lote:g(tag(d,'rastro'),'nLote')}}).filter(i=>i.qtd>0);
+  if(!itens.length)throw new Error('A nota não tem itens com quantidade');
+  const dups=[...inf.getElementsByTagName('dup')].map(d=>({n:g(d,'nDup'),venc:g(d,'dVenc'),valor:+g(d,'vDup')||0})).filter(d=>d.venc&&d.valor>0);
+  const vProd=+g(tot,'vProd')||itens.reduce((s,i)=>s+i.total,0);
+  return {chave:(inf.getAttribute('Id')||'').replace(/^NFe/,''),numero:g(ide,'nNF'),serie:g(ide,'serie'),emissao:(g(ide,'dhEmi')||g(ide,'dEmi')).slice(0,10),
+    forn:{nome:g(emit,'xNome'),contato:g(emit,'xFant')||null,documento:fmtDoc(g(emit,'CNPJ')||g(emit,'CPF')),telefone:fmtFone(g(en,'fone'))||null,
+      endereco:[[g(en,'xLgr'),g(en,'nro')].filter(Boolean).join(', '),g(en,'xBairro'),[g(en,'xMun'),g(en,'UF')].filter(Boolean).join('/'),g(en,'CEP')?'CEP '+g(en,'CEP'):''].filter(Boolean).join(' - ')||null},
+    itens,dups,vProd,vFrete:+g(tot,'vFrete')||0,vDesc:+g(tot,'vDesc')||0,vNF:+g(tot,'vNF')||vProd};
+}
+function acharProdNFe(it){
+  const ps=S.produtos.filter(p=>!servico(p)),c=normTxt(it.codigo),n=normTxt(it.nome);
+  return (c&&ps.find(p=>normTxt(p.codigo)===c))||ps.find(p=>normTxt(p.nome)===n)||null;
+}
+async function abrirXML(inp){
+  const file=inp.files&&inp.files[0];inp.value='';if(!file)return;
+  try{
+    const nf=lerNFe(await file.text());
+    if(nf.chave){const ja=await q(sb.from('movimentos').select('id,data').eq('empresa_id',S.empresa.id).ilike('obs','%'+nf.chave+'%').limit(1));
+      if(ja.length)return toast('Esta NF-e ('+nf.numero+') já foi importada em '+new Date(ja[0].data).toLocaleDateString('pt-BR'),1)}
+    nf.fornId=(S.fornecedores.find(f=>soDig(f.documento)&&soDig(f.documento)===soDig(nf.forn.documento))||{}).id||'';
+    nf.itens.forEach(it=>{const p=acharProdNFe(it);it.prod=p?p.id:'__novo'});
+    S._nfe=nf;telaNFe();
+  }catch(e){erro(e)}
+}
+function telaNFe(){
+  const nf=S._nfe,fat=nf.vProd>0?nf.vNF/nf.vProd:1,difer=Math.abs(fat-1)>0.0001;
+  const optsP=sel=>`<option value="__novo" ${sel==='__novo'?'selected':''}>➕ Cadastrar como produto novo</option>`+S.produtos.filter(p=>!servico(p)).map(p=>`<option value="${p.id}" ${p.id===sel?'selected':''}>${esc(p.nome)}${p.codigo?' ('+esc(p.codigo)+')':''}</option>`).join('');
+  modal(`<h3>📄 NF-e ${esc(nf.numero)}${nf.serie?' · série '+esc(nf.serie):''}</h3>
+  <p style="color:var(--muted);margin:4px 0 12px;font-size:13px">Emitida em ${nf.emissao?new Date(nf.emissao+'T12:00').toLocaleDateString('pt-BR'):'—'} · <b style="color:var(--text)">${esc(nf.forn.nome)}</b> ${esc(nf.forn.documento)}<br>
+  ${nf.fornId?'✅ Fornecedor já cadastrado':'➕ Fornecedor novo — será cadastrado automaticamente'} · Produtos ${R(nf.vProd)}${nf.vFrete?' · Frete '+R(nf.vFrete):''}${nf.vDesc?' · Desconto '+R(nf.vDesc):''} · <b style="color:var(--text)">Total ${R(nf.vNF)}</b></p>
+  <form id="fnfe" class="f" onsubmit="event.preventDefault();gravarNFe(this)">
+  <div class="tw c2" style="max-height:42vh;overflow:auto"><table><tr><th>Item da nota</th><th class="num">Qtd</th><th class="num">Custo un.</th><th>Vincular ao produto</th></tr>
+  ${nf.itens.map((it,ix)=>`<tr><td><b>${esc(it.nome)}</b><div style="color:var(--muted);font-size:12px">Cód. ${esc(it.codigo)}${it.lote?' · Lote '+esc(it.lote):''}</div></td><td class="num">${N(it.qtd)} ${esc(it.uCom)}</td><td class="num">${R(it.custo)}</td><td><select name="m${ix}" style="min-width:200px">${optsP(it.prod)}</select></td></tr>`).join('')}</table></div>
+  ${difer?`<label class="c2" style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" name="ratear" checked style="width:auto"> Somar frete/descontos no custo dos produtos (custo real de cada item)</label>`:''}
+  <div class="c2"><label>Pagamento desta nota</label><select name="pg" onchange="document.querySelectorAll('.nfx').forEach(e=>e.classList.toggle('hide',!e.classList.contains('nf-'+this.value)))">
+    <option value="prazo" ${nf.dups.length?'selected':''}>A prazo (conta a pagar)</option><option value="pago">${MULTI()?'Já paguei (sai do banco hoje)':'Já paguei (sai do caixa hoje)'}</option><option value="nenhum" ${nf.dups.length?'':'selected'}>Não lançar no financeiro</option></select></div>
+  <div class="nfx nf-prazo c2 ${nf.dups.length?'':'hide'}">${nf.dups.length?`<p style="font-size:13px;color:var(--muted)">Serão lançadas ${nf.dups.length} parcela(s) conforme a nota: ${nf.dups.map(d=>`${new Date(d.venc+'T12:00').toLocaleDateString('pt-BR')} ${R(d.valor)}`).join(' · ')}</p>`:`<label>Vencimento</label><input name="v" type="date" value="${addDays(today(),30)}">`}</div>
+  ${MULTI()?`<div class="nfx nf-pago c2 hide"><label>Pago com a conta</label><select name="cta">${optsList(S.contas,'',S.contas.length?undefined:'Cadastre uma conta em Financeiro')}</select></div>`:`<input type="hidden" name="cta" value="${caixaId()||''}">`}
+  <div class="row c2" style="margin-top:6px"><span class="sp"></span><button type="button" class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bnfe">⬇️ Dar entrada em ${nf.itens.length} item(ns)</button></div></form>`);
+}
+function gravarNFe(form){const nf=S._nfe,f=Object.fromEntries(new FormData(form));busy($('#bnfe'),async()=>{
+  if(f.pg==='pago'&&!f.cta)return toast(MULTI()?'Escolha a conta usada no pagamento':'Caixa não encontrado. Atualize a página.',1);
+  const eid=S.empresa.id,fat=f.ratear&&nf.vProd>0?nf.vNF/nf.vProd:1,obs=`NF-e ${nf.numero}${nf.serie?'/'+nf.serie:''} · chave ${nf.chave}`;
+  let fid=nf.fornId;
+  if(!fid)fid=(await q(sb.from('fornecedores').insert({...nf.forn,obs:'Cadastrado pela importação da NF-e '+nf.numero,empresa_id:eid}).select().single())).id;
+  let novos=0;
+  for(const [ix,it] of nf.itens.entries()){
+    const custo=Math.round(it.custo*fat*10000)/10000;let pid=f['m'+ix];
+    if(pid==='__novo'){pid=(await q(sb.from('produtos').insert({codigo:it.codigo||null,nome:it.nome.slice(0,120),descricao:null,categoria:'Material',unidade:it.unidade,custo,preco:0,minimo:0,empresa_id:eid}).select().single())).id;novos++}
+    await rpc('registrar_entrada',{p_produto:pid,p_qtd:it.qtd,p_custo:custo,p_obs:obs+(it.lote?' · lote '+it.lote:''),p_fornecedor:fid,p_pagamento:'nenhum',p_conta:null,p_vencimento:null});
+  }
+  const desc=`NF-e ${nf.numero} — ${nf.forn.nome}`.slice(0,140),base={categoria:'Compra de mercadoria',fornecedor_id:fid,cliente_id:null,tipo:'pagar',empresa_id:eid};
+  if(f.pg==='pago')await q(sb.from('lancamentos').insert({...base,descricao:desc,valor:nf.vNF,vencimento:today(),pago:true,data_pagamento:today(),conta_id:f.cta}));
+  else if(f.pg==='prazo'){const ps=nf.dups.length?nf.dups.map((d,i)=>({...base,descricao:desc+` (parc. ${i+1}/${nf.dups.length})`,valor:d.valor,vencimento:d.venc})):[{...base,descricao:desc,valor:nf.vNF,vencimento:f.v||addDays(today(),30)}];
+    await q(sb.from('lancamentos').insert(ps))}
+  S._nfe=null;await recarregar();fechar();render();
+  toast(`NF-e ${nf.numero} importada: ${nf.itens.length} item(ns)${novos?' · '+novos+' produto(s) novo(s)':''}`);
+  if(novos)setTimeout(()=>toast('Defina o preço de venda dos produtos novos em Produtos, se for vendê-los'),3400);
+})}
+
 // ---- Estoque
 VIEWS.estoque=()=>{
-  const l=S.produtos.filter(p=>!S.fEst||(S.fEst==='baixo'?repor(p):p.estoque<=0)).sort((a,b)=>S.fEst?a.estoque-b.estoque:0);const nRep=S.produtos.filter(repor).length;
-  const tc=S.produtos.reduce((s,p)=>s+Math.max(p.estoque,0)*p.custo,0),tv=S.produtos.reduce((s,p)=>s+Math.max(p.estoque,0)*p.preco,0);
+  const PE=S.produtos.filter(p=>!servico(p));
+  const l=PE.filter(p=>!S.fEst||(S.fEst==='baixo'?repor(p):p.estoque<=0)).sort((a,b)=>S.fEst?a.estoque-b.estoque:0);const nRep=PE.filter(repor).length;
+  const tc=PE.reduce((s,p)=>s+Math.max(p.estoque,0)*p.custo,0),tv=PE.reduce((s,p)=>s+Math.max(p.estoque,0)*p.preco,0);
   return `<h1>Estoque</h1><p class="sub">Posição atual de cada produto${dono()?', valor investido e potencial de venda':''}.</p>
-  ${dono()?`<div class="grid k4"><div class="card kpi"><div class="l">Itens em estoque</div><div class="v">${N(S.produtos.reduce((s,p)=>s+Math.max(p.estoque,0),0))}</div></div><div class="card kpi"><div class="l">Valor de custo</div><div class="v">${R(tc)}</div></div><div class="card kpi"><div class="l">Valor de venda</div><div class="v">${R(tv)}</div></div><div class="card kpi"><div class="l">Lucro potencial</div><div class="v" style="color:var(--ok)">${R(tv-tc)}</div></div></div>`:''}
+  ${dono()?`<div class="grid k4"><div class="card kpi"><div class="l">Itens em estoque</div><div class="v">${N(PE.reduce((s,p)=>s+Math.max(p.estoque,0),0))}</div></div><div class="card kpi"><div class="l">Valor de custo</div><div class="v">${R(tc)}</div></div><div class="card kpi"><div class="l">Valor de venda</div><div class="v">${R(tv)}</div></div><div class="card kpi"><div class="l">Lucro potencial</div><div class="v" style="color:var(--ok)">${R(tv-tc)}</div></div></div>`:''}
   <div class="card tw" style="margin-top:16px"><h3>Posição por produto <select style="width:auto" onchange="S.fEst=this.value;render()"><option value="">Todos</option><option value="baixo" ${S.fEst==='baixo'?'selected':''}>🔴 Repor (${nRep})</option><option value="zero" ${S.fEst==='zero'?'selected':''}>Zerados</option></select></h3>
   <table><tr><th>Produto</th><th class="num">Estoque</th><th class="num">Mínimo</th>${dono()?'<th class="num">Custo médio</th><th class="num">Total custo</th>':''}<th>Status</th><th></th></tr>
   ${l.map(p=>{const s=status(p),rp=repor(p);return `<tr class="${rp?'baixo':''}"><td><b>${esc(p.nome)}</b><div style="color:var(--muted);font-size:12px">${esc(p.categoria)}</div></td><td class="num">${rp?`<b style="color:var(--bad)">${N(p.estoque)}</b>`:N(p.estoque)} ${esc(p.unidade)}</td><td class="num">${N(lim(p))}</td>${dono()?`<td class="num">${R(p.custo)}</td><td class="num">${R(Math.max(p.estoque,0)*p.custo)}</td>`:''}<td><span class="tag ${s[1]}">${s[0]}</span></td><td class="num"><button class="btn sm" onclick="kardex('${p.id}')">Movimentos</button></td></tr>`}).join('')||'<tr><td colspan="7" class="empty">Nenhum produto</td></tr>'}</table></div>`;
