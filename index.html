@@ -106,6 +106,13 @@ input:focus,select:focus{border-color:var(--brand)}
 .eqp .n{flex:1;min-width:0}.eqp .n b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .eqp input{width:64px;text-align:center;padding:7px}
 #printArea{display:none}
+.rsdoc{background:#fff;color:#1d2433;font-size:12px;line-height:1.45;padding:10px 12px;font-family:Inter,Arial,sans-serif}
+.rs-h{display:flex;justify-content:space-between;gap:16px;border-bottom:2px solid #1d2433;padding-bottom:8px;margin-bottom:8px}
+.rs-emp{font-size:16px;font-weight:800}.rs-tit{font-size:18px;font-weight:800;text-align:right}.rs-sub{font-size:11px;color:#5d6782;font-weight:500}
+.rs-cli{margin-bottom:8px}
+.rs-t{width:100%;border-collapse:collapse;font-size:11.5px}.rs-t th{background:#1d2433;color:#fff;text-align:left;padding:5px 6px;font-weight:600}.rs-t td{padding:5px 6px;border-bottom:1px solid #dde3ef;color:#1d2433;background:#fff}.rs-t .n,.rs-t .nw{text-align:right;white-space:nowrap}.rs-t .nw{text-align:left}
+.rs-tot{margin:10px 0 0 auto;max-width:330px}.rs-tot div{display:flex;justify-content:space-between;gap:10px;padding:2px 0}.rs-dif{border-top:1px solid #1d2433;margin-top:4px;padding-top:4px!important;font-size:13px}
+.rs-rod{margin-top:16px;font-size:10px;color:#8d99bd;text-align:center}
 @media print{body>*:not(#printArea){display:none!important}#printArea{display:block}#printArea .etq{box-shadow:none;border-radius:0}body{background:#fff}}
 .contas{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
 .cb{position:relative;overflow:hidden}
@@ -190,7 +197,7 @@ async function carregarSessao(){
 async function trocarEmpresa(id){
   const e=(S.empresas||[]).find(x=>x.id===id);if(!e)return;
   try{localStorage.setItem('gp_emp',id)}catch(er){}
-  S.empresa=e;S.papel=e.papel;S.cart=[];S.busca='';S.pdvF={desc:0,pg:'PIX',cli:'',conta:null,venc:''};S.caixaDia=null;S.precSel={};S.etq.qtd={};S.buscaCad='';S.hDe=S.hAte='';S.view='painel';
+  S.empresa=e;S.papel=e.papel;S.cart=[];S.busca='';S.pdvF={desc:0,pg:'PIX',cli:'',conta:null,venc:'',pac:'',fic:'',ent:''};S.rs={cli:'',de:'',ate:''};S.caixaDia=null;S.precSel={};S.etq.qtd={};S.buscaCad='';S.hDe=S.hAte='';S.view='painel';
   if(!ativa(e)&&!S.admin)return telaBloqueio();
   if(!ativa(e)&&S.admin){S.view='admin';return montarApp()}
   try{await recarregar()}catch(er){return erro(er)}
@@ -285,7 +292,7 @@ function telaBloqueio(){
 async function sair(){await sb.auth.signOut();S.user=S.empresa=null;S.cart=[];S.view='painel';telaLogin()}
 
 // ============ APP ============
-const MENU=[['painel','📊','Painel'],['pdv','🛒','Vender (PDV)'],['produtos','📦','Produtos',1],['precificacao','🧮','Precificação',1],['entrada','⬇️','Entradas',1],['saida','⬆️','Saídas',1],['estoque','🗂️','Estoque'],['etiquetas','🏷️','Etiquetas'],['clientes','👤','Clientes'],['fornecedores','🚚','Fornecedores',1],['financeiro','🏦','Financeiro',1],['historico','🧾','Histórico'],['equipe','👥','Equipe',1],['conta','💳','Minha conta']];
+const MENU=[['painel','📊','Painel'],['pdv','🛒','Vender (PDV)'],['produtos','📦','Produtos',1],['precificacao','🧮','Precificação',1],['entrada','⬇️','Entradas',1],['saida','⬆️','Saídas',1],['estoque','🗂️','Estoque'],['etiquetas','🏷️','Etiquetas'],['clientes','👤','Clientes'],['fornecedores','🚚','Fornecedores',1],['financeiro','🏦','Financeiro',1],['historico','🧾','Histórico'],['servexec','📑','Serviços executados',1],['equipe','👥','Equipe',1],['conta','💳','Minha conta']];
 function montarApp(){
   const itens=S.empresa&&ativa(S.empresa)?MENU.filter(m=>!m[3]||dono()).map(m=>m[0]==='financeiro'&&!MULTI()?['financeiro','💵','Caixa',1]:m):[];
   if(S.admin)itens.push(['admin','🛡️','Admin (clientes)']);
@@ -370,10 +377,13 @@ VIEWS.pdv=()=>{
   return `<h1>Vender (PDV)</h1><p class="sub">Toque nos produtos ou digite/bipe o código de barras e aperte Enter.</p>
   <div class="pdv">
     <div class="card"><input id="bp" placeholder="🔎 Buscar por nome ou código..." value="${esc(S.busca)}" oninput="S.busca=this.value;S._refocus='bp';render()" onkeydown="if(event.key==='Enter'){const p=S.produtos.find(x=>(x.codigo||'')===this.value.trim());if(p){add(p.id);S.busca='';render()}}" style="margin-bottom:14px">
-    <div class="prods">${lista.map(p=>`<div class="pc ${p.estoque<=0&&!servico(p)?'off':''}" onclick="add('${p.id}')"><div class="n">${esc(p.nome)}${p.descricao?`<div style="font-weight:500;font-size:11px;color:var(--muted)">${esc(p.descricao)}</div>`:''}</div><div class="p">${R(p.preco)}</div><div class="s">Estoque: ${N(p.estoque)} ${esc(p.unidade)}</div></div>`).join('')||'<div class="empty">Nenhum produto</div>'}</div></div>
+    <div class="prods">${lista.map(p=>`<div class="pc ${p.estoque<=0&&!servico(p)?'off':''}" onclick="add('${p.id}')"><div class="n">${esc(p.nome)}${p.descricao?`<div style="font-weight:500;font-size:11px;color:var(--muted)">${esc(p.descricao)}</div>`:''}</div><div class="p">${R(p.preco)}</div><div class="s">${servico(p)?'Serviço':'Estoque: '+N(p.estoque)+' '+esc(p.unidade)}</div></div>`).join('')||'<div class="empty">Nenhum produto</div>'}</div></div>
     <div class="card cart"><h3>Carrinho <span class="tag t-blue">${N(S.cart.reduce((s,i)=>s+i.qtd,0))} itens</span></h3>
       ${S.cart.length?S.cart.map((i,ix)=>`<div class="it"><div class="n">${esc(i.nome)}<div style="color:var(--muted);font-size:12px;font-weight:500">${R(i.preco)} cada</div></div><div class="qty"><button onclick="qt(${ix},-1)">−</button><b style="min-width:22px;text-align:center">${N(i.qtd)}</b><button onclick="qt(${ix},1)">+</button></div><b style="min-width:80px;text-align:right">${R(i.qtd*i.preco)}</b></div>`).join(''):'<div class="empty">Carrinho vazio</div>'}
       <div class="f" style="grid-template-columns:1fr 1fr;margin-top:14px">
+        <div style="grid-column:span 2"><label>Paciente <span style="font-weight:500">(opcional)</span></label><input id="pac" placeholder="Nome do paciente" value="${esc(S.pdvF.pac||'')}" oninput="S.pdvF.pac=this.value"></div>
+        <div><label>Ficha / OS nº</label><input id="fic" placeholder="Ex.: 012826-1" value="${esc(S.pdvF.fic||'')}" oninput="S.pdvF.fic=this.value"></div>
+        <div><label>Data de entrada</label><input id="ent" type="date" value="${S.pdvF.ent||''}" onchange="S.pdvF.ent=this.value"></div>
         <div><label>Desconto (R$)</label><input id="desc" type="number" min="0" step="0.01" value="${S.pdvF.desc}" oninput="S.pdvF.desc=this.value;$('#tot').textContent=R(Math.max(0,${bruto}-(+this.value||0)))"></div>
         <div><label>Pagamento</label><select id="pg" onchange="S.pdvF.pg=this.value;render()">${['PIX','Dinheiro','Cartão de débito','Cartão de crédito','Boleto','Fiado'].map(o=>`<option ${o===S.pdvF.pg?'selected':''}>${o}</option>`).join('')}</select></div>
         <div style="grid-column:span 2"><label>Cliente ${S.pdvF.pg==='Fiado'?'<b style="color:var(--warn)">(obrigatório no fiado)</b>':'(opcional)'}</label><div class="row" style="flex-wrap:nowrap"><select id="cli" onchange="S.pdvF.cli=this.value">${optsList(S.clientes,S.pdvF.cli,'Consumidor (sem cadastro)')}</select><button class="btn sm" title="Cadastrar cliente" onclick="formCad('clientes',null,true)">+ Novo</button></div></div>
@@ -394,14 +404,14 @@ function finalizar(b,conferido){
     const F=S.pdvF,fiado=F.pg==='Fiado';
     if(fiado&&!F.cli)return toast('Escolha ou cadastre o cliente para vender fiado',1);
     const r=await rpc('registrar_venda',{p_empresa:S.empresa.id,p_itens:S.cart.map(i=>({produto_id:i.produto_id,qtd:i.qtd})),p_desconto:+F.desc||0,p_pagamento:F.pg,p_cliente:null,
-      p_cliente_id:F.cli||null,p_conta:fiado?null:(F.conta||null),p_vencimento:fiado?(F.venc||addDays(today(),30)):null});
-    S.cart=[];S.busca='';S.pdvF={...S.pdvF,desc:0,cli:'',venc:''};await recarregar();render();cupom(r.id);toast('Venda #'+r.numero+' registrada');
+      p_cliente_id:F.cli||null,p_conta:fiado?null:(F.conta||null),p_vencimento:fiado?(F.venc||addDays(today(),30)):null,p_paciente:F.pac||null,p_ficha:F.fic||null,p_entrada:F.ent||null});
+    S.cart=[];S.busca='';S.pdvF={...S.pdvF,desc:0,cli:'',venc:'',pac:'',fic:'',ent:''};await recarregar();render();cupom(r.id);toast('Venda #'+r.numero+' registrada');
   });
 }
 async function cupom(id){
   let v=S.vendas.find(x=>x.id===id);
   if(!v){try{v=normVenda((await q(sb.from('vendas').select('*,venda_itens(*)').eq('id',id)))[0])}catch(e){return erro(e)}}
-  modal(`<h3>🧾 Venda #${v.numero} ${v.cancelada?'<span class="tag t-bad">Cancelada</span>':'<span class="tag t-ok">Concluída</span>'}</h3><p style="color:var(--muted);margin-bottom:10px">${D(v.data)} · ${esc(v.pagamento)}${v.cliente?' · '+esc(v.cliente):''}</p>
+  modal(`<h3>🧾 Venda #${v.numero} ${v.cancelada?'<span class="tag t-bad">Cancelada</span>':'<span class="tag t-ok">Concluída</span>'}</h3><p style="color:var(--muted);margin-bottom:10px">${D(v.data)} · ${esc(v.pagamento)}${v.cliente?' · '+esc(v.cliente):''}${v.paciente?'<br>Paciente: <b>'+esc(v.paciente)+'</b>':''}${v.ficha?' · Ficha '+esc(v.ficha):''}</p>
   <div class="tw"><table><tr><th>Item</th><th class="num">Qtd</th><th class="num">Unit.</th><th class="num">Total</th></tr>${v.itens.map(i=>`<tr><td>${esc(i.nome)}</td><td class="num">${N(i.qtd)}</td><td class="num">${R(i.preco)}</td><td class="num">${R(i.qtd*i.preco)}</td></tr>`).join('')}</table></div>
   <div class="row" style="margin-top:12px"><span class="sp"></span><div style="text-align:right">${v.desconto?`<div style="color:var(--muted)">Desconto: −${R(v.desconto)}</div>`:''}<div class="total" style="margin:4px 0">${R(v.total)}</div></div></div>
   <div class="row">${!v.cancelada&&dono()?`<button class="btn d" onclick="fechar();confirmar('Cancelar a venda #${v.numero}? Os produtos voltam para o estoque.',()=>cancelar('${v.id}'))">Cancelar venda</button>`:''}<button class="btn" onclick="copiarCupom('${v.id}')">📋 Copiar p/ WhatsApp</button><span class="sp"></span><button class="btn p" onclick="fechar()">Fechar</button></div>`);
@@ -673,8 +683,83 @@ VIEWS.historico=async()=>{
   <div class="grid k4" style="margin-top:16px"><div class="card kpi"><div class="l">Vendas</div><div class="v">${at.length}</div></div><div class="card kpi"><div class="l">Faturamento</div><div class="v">${R(fat)}</div></div>${dono()?`<div class="card kpi"><div class="l">Custo mercadorias</div><div class="v">${R(cmv)}</div></div><div class="card kpi"><div class="l">Lucro bruto</div><div class="v" style="color:var(--ok)">${R(fat-cmv)}</div></div>`:''}</div>
   <div class="card" style="margin-top:16px"><h3>Por forma de pagamento</h3><div class="row">${Object.entries(porPg).map(([k,v])=>`<span class="tag t-blue" style="padding:8px 12px">${esc(k)}: ${R(v)}</span>`).join('')||'<span style="color:var(--muted)">—</span>'}</div></div>
   <div class="card tw" style="margin-top:16px"><table><tr><th>#</th><th>Data</th><th>Cliente</th><th>Pagamento</th><th class="num">Itens</th><th class="num">Total</th><th></th></tr>
-  ${vs.map(v=>`<tr style="${v.cancelada?'opacity:.5':''}"><td>${v.numero}</td><td>${D(v.data)}</td><td>${esc(v.cliente||'—')}</td><td>${esc(v.pagamento)}</td><td class="num">${N(v.itens.reduce((s,i)=>s+i.qtd,0))}</td><td class="num"><b>${R(v.total)}</b>${v.cancelada?' <span class="tag t-bad">cancelada</span>':''}</td><td class="num"><button class="btn sm" onclick="cupomHist('${v.id}')">Ver</button></td></tr>`).join('')||'<tr><td colspan="7" class="empty">Nenhuma venda no período</td></tr>'}</table></div>`;
+  ${vs.map(v=>`<tr style="${v.cancelada?'opacity:.5':''}"><td>${v.numero}</td><td>${D(v.data)}</td><td>${esc(v.cliente||'—')}${v.paciente?`<div style="color:var(--muted);font-size:12px">Pac.: ${esc(v.paciente)}${v.ficha?' · '+esc(v.ficha):''}</div>`:''}</td><td>${esc(v.pagamento)}</td><td class="num">${N(v.itens.reduce((s,i)=>s+i.qtd,0))}</td><td class="num"><b>${R(v.total)}</b>${v.cancelada?' <span class="tag t-bad">cancelada</span>':''}</td><td class="num"><button class="btn sm" onclick="cupomHist('${v.id}')">Ver</button></td></tr>`).join('')||'<tr><td colspan="7" class="empty">Nenhuma venda no período</td></tr>'}</table></div>`;
 };
+// ---- Serviços executados (extrato mensal por cliente)
+const mesAtual=()=>{const t=today();return [t.slice(0,8)+'01',(()=>{const d=new Date(+t.slice(0,4),+t.slice(5,7),0);return t.slice(0,8)+String(d.getDate()).padStart(2,'0')})()]};
+const iniDia=d=>new Date(d+'T00:00:00').toISOString(),fimDia=d=>new Date(d+'T23:59:59').toISOString();
+VIEWS.servexec=async()=>{
+  const F=S.rs||(S.rs={cli:'',de:'',ate:''});if(!F.de){[F.de,F.ate]=mesAtual()}
+  const E=S.empresa.id;
+  const vs=await q(sb.from('vendas').select('id,numero,data,total,desconto,cliente_id,paciente,ficha,data_entrada,venda_itens(nome,qtd,preco,produto_id)').eq('empresa_id',E).eq('cancelada',false).not('cliente_id','is',null).gte('data',iniDia(F.de)).lte('data',fimDia(F.ate)).order('data'));
+  const pg=await q(sb.from('lancamentos').select('cliente_id,valor,data_pagamento').eq('empresa_id',E).eq('tipo','receber').eq('pago',true).not('cliente_id','is',null).gte('data_pagamento',F.de).lte('data_pagamento',F.ate));
+  const ab=await q(sb.from('lancamentos').select('cliente_id,valor').eq('empresa_id',E).eq('tipo','receber').eq('pago',false).not('cliente_id','is',null));
+  const res={};const ad=(id)=>res[id]||(res[id]={serv:0,total:0,pago:0,aberto:0});
+  vs.forEach(v=>{const r=ad(v.cliente_id);r.serv+=v.venda_itens.reduce((s,i)=>s+ +i.qtd,0);r.total+=+v.total});
+  pg.forEach(l=>{ad(l.cliente_id).pago+=+l.valor});ab.forEach(l=>{if(res[l.cliente_id])res[l.cliente_id].aberto+=+l.valor});
+  S._rs={vs,pg,ab};
+  const linhas=Object.entries(res).filter(([,r])=>r.total>0||r.pago>0).map(([id,r])=>({id,nome:(S.clientes.find(c=>c.id===id)||{}).nome||'(cliente removido)',...r})).sort((a,b)=>b.total-a.total);
+  const tot=linhas.reduce((s,l)=>s+l.total,0),totp=linhas.reduce((s,l)=>s+l.pago,0);
+  return `<div class="row"><div><h1>Serviços executados</h1><p class="sub">Relatório mensal por cliente: serviços, pacientes e valores, pronto para imprimir em PDF e mandar.</p></div><span class="sp"></span>${dono()?'<button class="btn" onclick="formCabecalho()">🏢 Dados do cabeçalho</button>':''}</div>
+  <div class="card"><div class="f">
+    <div><label>De</label><input type="date" value="${F.de}" onchange="S.rs.de=this.value;render()"></div>
+    <div><label>Até</label><input type="date" value="${F.ate}" onchange="S.rs.ate=this.value;render()"></div>
+    <div style="align-self:end"><button class="btn" style="width:100%" onclick="[S.rs.de,S.rs.ate]=mesAtual();render()">Este mês</button></div>
+    <div style="align-self:end"><button class="btn" style="width:100%" onclick="const d=new Date(S.rs.de+'T12:00');d.setMonth(d.getMonth()-1);const a=d.toISOString().slice(0,8);S.rs.de=a+'01';S.rs.ate=a+String(new Date(d.getFullYear(),d.getMonth()+1,0).getDate()).padStart(2,'0');render()">Mês anterior</button></div>
+  </div></div>
+  <div class="grid k4" style="margin-top:16px"><div class="card kpi"><div class="l">Clientes atendidos</div><div class="v">${linhas.filter(l=>l.total>0).length}</div></div><div class="card kpi"><div class="l">Total em serviços</div><div class="v">${R(tot)}</div></div><div class="card kpi"><div class="l">Recebido no período</div><div class="v" style="color:var(--ok)">${R(totp)}</div></div><div class="card kpi"><div class="l">Diferença</div><div class="v" style="color:${totp-tot<0?'var(--bad)':'var(--ok)'}">${R(totp-tot)}</div></div></div>
+  <div class="card tw" style="margin-top:16px"><h3>Clientes no período <span class="sp"></span><span style="color:var(--muted);font-size:13px;font-weight:500">Toque em "Relatório" para gerar o extrato de cada um</span></h3>
+  <table><tr><th>Cliente</th><th class="num">Serviços</th><th class="num">Total</th><th class="num">Recebido</th><th class="num">Diferença</th><th class="num">Em aberto (geral)</th><th></th></tr>
+  ${linhas.map(l=>`<tr><td><b>${esc(l.nome)}</b></td><td class="num">${N(l.serv)}</td><td class="num">${R(l.total)}</td><td class="num">${R(l.pago)}</td><td class="num" style="color:${l.pago-l.total<0?'var(--bad)':'var(--ok)'}">${R(l.pago-l.total)}</td><td class="num">${l.aberto?R(l.aberto):'—'}</td><td class="num"><button class="btn sm p" onclick="relServ('${l.id}')">📑 Relatório</button></td></tr>`).join('')||'<tr><td colspan="7" class="empty">Nenhuma venda com cliente neste período.<br><span style="font-size:13px">No PDV, escolha o cliente (e o paciente) ao finalizar, para a venda aparecer aqui.</span></td></tr>'}
+  </table></div>
+  <div class="card" style="margin-top:16px"><h3>Gerar para um cliente</h3><div class="row" style="flex-wrap:nowrap"><select id="rscli">${optsList(S.clientes,S.rs.cli,'Escolha o cliente')}</select><button class="btn p" onclick="const c=$('#rscli').value;if(!c)return toast('Escolha o cliente',1);S.rs.cli=c;relServ(c)">Gerar relatório</button></div></div>`;
+};
+async function empDados(){try{return (await q(sb.from('empresas').select('nome,endereco,telefone,documento,whatsapp').eq('id',S.empresa.id)))[0]||{nome:S.empresa.nome}}catch(e){return {nome:S.empresa.nome}}}
+async function relServ(cid){
+  const c=S.clientes.find(x=>x.id===cid)||{nome:'Cliente'},F=S.rs,emp=await empDados();
+  const vs=(S._rs.vs||[]).filter(v=>v.cliente_id===cid);
+  const pago=(S._rs.pg||[]).filter(l=>l.cliente_id===cid).reduce((s,l)=>s+ +l.valor,0);
+  const aberto=(S._rs.ab||[]).filter(l=>l.cliente_id===cid).reduce((s,l)=>s+ +l.valor,0);
+  const ln=[];vs.forEach(v=>v.venda_itens.forEach(i=>{const pr=S.produtos.find(p=>p.id===i.produto_id);ln.push({qtd:+i.qtd,desc:i.nome+(pr&&pr.descricao?' '+pr.descricao:''),ficha:v.ficha||('#'+v.numero),pac:v.paciente||'',valor:+i.qtd*+i.preco,ent:v.data_entrada,fin:v.data})}));
+  const bruto=ln.reduce((s,l)=>s+l.valor,0),desc=vs.reduce((s,v)=>s+ +v.desconto,0),total=bruto-desc;
+  const dt=x=>x?new Date(String(x).length===10?x+'T12:00':x).toLocaleDateString('pt-BR'):'—';
+  const doc=`<div class="rsdoc">
+    <div class="rs-h"><div><div class="rs-emp">${esc(emp.nome)}</div><div class="rs-sub">${[emp.endereco,emp.telefone||emp.whatsapp,emp.documento?'CNPJ '+emp.documento:''].filter(Boolean).map(esc).join(' · ')}</div></div><div class="rs-tit">Serviços Executados<div class="rs-sub">${dt(F.de)} a ${dt(F.ate)}</div></div></div>
+    <div class="rs-cli"><b>Cliente:</b> ${esc(c.nome)}${c.telefone?' · '+esc(c.telefone):''}${c.endereco?'<br><b>Endereço:</b> '+esc(c.endereco):''}</div>
+    <table class="rs-t"><thead><tr><th>Qtd</th><th>Descrição</th><th>Ficha</th><th>Paciente</th><th class="n">Valor</th><th>Entrada</th><th>Finalizado</th></tr></thead><tbody>
+    ${ln.map(l=>`<tr><td>${N(l.qtd)}</td><td>${esc(l.desc)}</td><td class="nw">${esc(l.ficha)}</td><td>${esc(l.pac)||'—'}</td><td class="n">${R(l.valor)}</td><td class="nw">${dt(l.ent)}</td><td class="nw">${dt(l.fin)}</td></tr>`).join('')||'<tr><td colspan="7" style="text-align:center;padding:14px">Nenhum serviço no período</td></tr>'}
+    </tbody></table>
+    <div class="rs-tot">
+      <div><span>Total dos serviços listados:</span><b>${R(bruto)}</b></div>
+      ${desc?`<div><span>Descontos:</span><b>−${R(desc)}</b></div><div><span>Total geral:</span><b>${R(total)}</b></div>`:''}
+      <div><span>Total de pagamentos no período:</span><b>${R(pago)}</b></div>
+      <div class="rs-dif"><span>Total diferença:</span><b>${R(pago-total)}</b></div>
+      ${aberto?`<div><span>Saldo em aberto (todos os períodos):</span><b>${R(aberto)}</b></div>`:''}
+    </div>
+    <div class="rs-rod">Emitido em ${new Date().toLocaleDateString('pt-BR')} · ${esc(emp.nome)}</div>
+  </div>`;
+  S._rsDoc={doc,c,total,pago,ln,emp};
+  const w=waLink(c.telefone);
+  modal(`<div style="max-height:70vh;overflow:auto;background:#fff;border-radius:10px;padding:6px">${doc}</div>
+  <div class="row" style="margin-top:12px"><button class="btn" onclick="fechar()">Fechar</button><span class="sp"></span><button class="btn" onclick="copiarRelServ()">📋 Copiar resumo</button>${w?`<a class="btn" style="text-decoration:none" target="_blank" href="${w}?text=${encodeURIComponent(txtRelServ())}">📲 WhatsApp</a>`:''}<button class="btn p" onclick="imprimirRelServ()">🖨️ Imprimir / PDF</button></div>`);
+  $('#mbox').style.maxWidth='980px';
+}
+function txtRelServ(){const r=S._rsDoc,F=S.rs,dt=x=>new Date(x+'T12:00').toLocaleDateString('pt-BR');return `*${r.emp.nome}*\nServiços executados de ${dt(F.de)} a ${dt(F.ate)}\nCliente: ${r.c.nome}\n\n${r.ln.map(l=>`• ${N(l.qtd)}x ${l.desc}${l.pac?' — Pac. '+l.pac:''} — ${R(l.valor)}`).join('\n')}\n\n*Total: ${R(r.total)}*\nPagamentos no período: ${R(r.pago)}\nDiferença: ${R(r.pago-r.total)}\n\nSegue o relatório em PDF. Qualquer dúvida estamos à disposição!`}
+function copiarRelServ(){navigator.clipboard.writeText(txtRelServ()).then(()=>toast('Resumo copiado!'),()=>toast('Não foi possível copiar',1))}
+function imprimirRelServ(){
+  let area=$('#printArea');if(!area){area=document.createElement('div');area.id='printArea';document.body.appendChild(area)}
+  let css=$('#pagecss');if(!css){css=document.createElement('style');css.id='pagecss';document.head.appendChild(css)}
+  css.textContent='@page{size:A4;margin:12mm}';area.innerHTML=S._rsDoc.doc;
+  const t=document.title;document.title='Servicos executados - '+S._rsDoc.c.nome;
+  setTimeout(()=>{try{window.print()}catch(e){toast('Não foi possível abrir a impressão',1)}document.title=t},300);
+}
+async function formCabecalho(){const e=await empDados();
+  modal(`<h3>🏢 Dados do cabeçalho do relatório</h3><p style="color:var(--muted);margin-bottom:12px">Aparecem no topo do relatório de serviços executados.</p>
+  <form id="fcab" class="f"><div style="grid-column:span 2"><label>Endereço</label><input name="end" value="${esc(e.endereco||'')}" placeholder="Rua, número, bairro, cidade - UF"></div>
+  <div><label>Telefone</label><input name="tel" value="${esc(e.telefone||'')}" placeholder="(34) 3235-4800"></div><div><label>CNPJ</label><input name="doc" value="${esc(e.documento||'')}"></div>
+  <div class="row" style="grid-column:span 2"><span class="sp"></span><button type="button" class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bcab">Salvar</button></div></form>`);
+  $('#fcab').onsubmit=ev=>{ev.preventDefault();const f=Object.fromEntries(new FormData(ev.target));busy($('#bcab'),async()=>{await rpc('salvar_dados_empresa',{p_empresa:S.empresa.id,p_endereco:f.end,p_telefone:f.tel,p_documento:f.doc});fechar();toast('Dados salvos')})};
+}
 function cupomHist(id){const v=(S._hist||[]).find(x=>x.id===id);if(v&&!S.vendas.find(x=>x.id===id))S.vendas.push(v);cupom(id)}
 
 // ---- Precificação
