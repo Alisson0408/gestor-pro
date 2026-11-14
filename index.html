@@ -35,6 +35,7 @@ nav button{display:flex;align-items:center;gap:10px;width:100%;padding:11px 12px
 nav button:hover{background:var(--panel)}
 nav button .bdg{margin-left:auto;background:var(--bad);color:#fff;font-size:11px;font-weight:800;border-radius:20px;padding:1px 7px;min-width:20px;text-align:center}
 tr.baixo td{background:rgba(255,93,115,.07)}
+.dupbloq{background:rgba(255,93,115,.14);border:1.5px solid var(--bad);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.6;margin:4px 0}.dupbloq b{color:var(--bad)}.dupmut{color:var(--muted);font-size:12px;margin-top:4px}.dupchk{display:flex;gap:8px;align-items:center;margin-top:8px;font-weight:600;color:var(--text);cursor:pointer;font-size:13px}.dupchk input{width:auto;accent-color:var(--warn)}
 .dupav{background:rgba(255,181,71,.12);border:1px solid rgba(255,181,71,.5);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.6}.dupav b{color:var(--warn)}
 .alerta-rep{background:rgba(255,93,115,.14);border:1px solid rgba(255,93,115,.45);border-radius:14px;padding:12px 16px;margin-bottom:16px;cursor:pointer;display:flex;flex-direction:column;gap:2px}.alerta-rep b{color:var(--bad);font-size:15px}.alerta-rep span{color:var(--muted);font-size:13px}
 nav button.on{background:linear-gradient(135deg,rgba(91,140,255,.18),rgba(138,91,255,.18));color:#fff;box-shadow:inset 0 0 0 1px rgba(91,140,255,.35)}
@@ -386,8 +387,9 @@ VIEWS.pdv=()=>{
 };
 function add(id){const p=P(id);const i=S.cart.find(x=>x.produto_id===id);const qn=(i?i.qtd:0)+1;if(!servico(p)&&qn>p.estoque)return toast('Sem estoque suficiente de '+p.nome,1);if(i)i.qtd++;else S.cart.push({produto_id:id,nome:p.nome,qtd:1,preco:p.preco});S._focus=0;render()}
 function qt(ix,d){const i=S.cart[ix];const p=P(i.produto_id);i.qtd+=d;if(p&&!servico(p)&&i.qtd>p.estoque){i.qtd=p.estoque;toast('Limite do estoque',1)}if(i.qtd<=0)S.cart.splice(ix,1);S._focus=0;render()}
-function finalizar(b){
+function finalizar(b,conferido){
   if(!S.cart.length)return toast('Carrinho vazio',1);
+  if(!conferido){const r=checaVenda();if(r.a.length)return dupModal(r,'Esta venda parece repetida',()=>finalizar($('#bf'),1))}
   busy(b,async()=>{
     const F=S.pdvF,fiado=F.pg==='Fiado';
     if(fiado&&!F.cli)return toast('Escolha ou cadastre o cliente para vender fiado',1);
@@ -427,6 +429,7 @@ function formProd(id){
   <div class="row" style="grid-column:span 2;margin-top:6px">${id?`<button type="button" class="btn d" onclick="delProd('${id}')">Excluir</button>`:''}<span class="sp"></span><button type="button" class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bs">Salvar</button></div></form>`);
   $('#fp').onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));
     const d={codigo:f.codigo.trim()||null,nome:f.nome.trim(),descricao:f.descricao.trim()||null,categoria:f.categoria.trim()||null,unidade:f.unidade,custo:+f.custo||0,preco:+f.preco||0,minimo:+f.minimo||0};
+    if(!dupBox(e.target,checaProd(d,id)))return;
     busy($('#bs'),async()=>{
       if(id)await q(sb.from('produtos').update(d).eq('id',id));
       else{const np=await q(sb.from('produtos').insert({...d,empresa_id:S.empresa.id}).select().single());if(+f.estoque>0)await rpc('registrar_entrada',{p_produto:np.id,p_qtd:+f.estoque,p_custo:d.custo||null,p_obs:'Estoque inicial'})}
@@ -461,7 +464,8 @@ VIEWS.saida=async()=>{const ult=await ultMovs('saida');return `<h1>Saída de mer
     <div class="c2"><label>Observação</label><input name="o"></div>
     <div class="c2" style="align-self:end"><button class="btn p" style="width:100%">⬆️ Registrar saída</button></div>
   </form></div><div class="card tw" style="margin-top:16px"><h3>Últimas saídas</h3>${tabMov(ult)}</div>`};
-function lancar(form,tipo){const f=Object.fromEntries(new FormData(form));busy(form.querySelector('button'),async()=>{
+function lancar(form,tipo){const f=Object.fromEntries(new FormData(form));busy(form.querySelector('button.p'),async()=>{
+  if(!dupBox(form,await checaMov(f,tipo)))return;
   if(tipo==='entrada'){
     if(f.pg!=='nenhum'&&!(+f.c>0)&&!(P(f.p)||{}).custo)return toast('Informe o custo unitário para lançar no financeiro',1);
     if(f.pg==='pago'&&!f.cta)return toast('Escolha a conta usada no pagamento',1);
@@ -472,6 +476,98 @@ function lancar(form,tipo){const f=Object.fromEntries(new FormData(form));busy(f
   const qn=+f.q;if(tipo==='entrada'&&qn>=1&&qn<=500&&Number.isInteger(qn)){const pr=P(f.p);
     modal(`<h3>🏷️ Imprimir etiquetas?</h3><p style="color:var(--muted);margin:8px 0 16px">Entraram <b style="color:var(--text)">${qn}</b> unidade(s) de <b style="color:var(--text)">${esc(pr.nome)}</b>. Quer imprimir uma etiqueta para cada?</p><div class="row"><span class="sp"></span><button class="btn" onclick="fechar()">Agora não</button><button class="btn p" onclick="fechar();S.etq.qtd={'${pr.id}':${qn}};go('etiquetas')">Imprimir ${qn} etiqueta(s)</button></div>`)}
 })}
+
+// ============ PROTEÇÃO CONTRA DUPLICIDADE ============
+// b = bloqueios (não deixa salvar) · a = avisos (só salva depois de marcar "Conferi e não é duplicado")
+const nfNums=t=>{const r=[],re=/\bN(?:F|OTA)(?:[\s\-]*E)?(?:\s*FISCAL)?[\s.:º°nN\-]*0*(\d{1,9})\b/gi;let m;const s=String(t||'').toUpperCase();while((m=re.exec(s)))r.push(m[1]);return [...new Set(r)]};
+const temNF=(txt,n)=>nfNums(txt).includes(String(+n));
+const ha=iso=>{const m=Math.round((Date.now()-new Date(iso))/6e4);return m<1?'agora mesmo':m<60?`há ${m} min`:m<1440?`há ${Math.round(m/60)} h`:`em ${new Date(iso).toLocaleDateString('pt-BR')}`};
+function dupBox(form,res){
+  let box=form.querySelector('.dupx');
+  if(!res.b.length&&!res.a.length){if(box)box.remove();return true}
+  if(!box){box=document.createElement('div');box.className='dupx';box.style.gridColumn='1/-1';form.lastElementChild.before(box)}
+  if(res.b.length){box.dataset.k='';box.innerHTML=`<div class="dupbloq"><b>⛔ Bloqueado — isto já está lançado</b>${res.b.map(x=>`<div>• ${x}</div>`).join('')}<div class="dupmut">Para evitar duplicidade o sistema não deixa salvar. Se precisar corrigir algo, abra o registro que já existe.</div></div>`;box.scrollIntoView({block:'nearest'});toast('Bloqueado: já existe um registro igual',1);return false}
+  const k=JSON.stringify(res.a),ck=box.querySelector('.dupok');
+  if(box.dataset.k===k&&ck&&ck.checked)return true;
+  box.dataset.k=k;box.innerHTML=`<div class="dupav"><b>⚠️ Atenção — confira antes de salvar (possível duplicidade ou erro)</b>${res.a.map(x=>`<div>• ${x}</div>`).join('')}<label class="dupchk"><input type="checkbox" class="dupok"> Conferi: está correto e <u>não</u> é duplicado — quero salvar</label></div>`;
+  box.scrollIntoView({block:'nearest'});toast('Confira o aviso de duplicidade antes de salvar',1);return false;
+}
+function dupModal(res,titulo,seguir){
+  if(res.b.length){modal(`<div class="dupbloq" style="margin:0"><b style="font-size:16px">⛔ ${titulo||'Lançamento bloqueado'}</b>${res.b.map(x=>`<div>• ${x}</div>`).join('')}<div class="dupmut">Para evitar duplicidade o sistema não deixa lançar de novo.</div></div><div class="row" style="margin-top:14px"><span class="sp"></span><button class="btn p" onclick="fechar()">Entendi</button></div>`);return}
+  if(!res.a.length)return seguir();
+  S._seguir=seguir;
+  modal(`<div class="dupav" style="margin:0"><b style="font-size:16px">⚠️ ${titulo||'Pode estar em duplicidade'}</b>${res.a.map(x=>`<div>• ${x}</div>`).join('')}<label class="dupchk"><input type="checkbox" class="dupok" onchange="$('#bdupok').disabled=!this.checked"> Conferi: está correto e <u>não</u> é duplicado</label></div><div class="row" style="margin-top:14px"><span class="sp"></span><button class="btn" onclick="S._seguir=null;fechar()">Cancelar</button><button class="btn p" id="bdupok" disabled onclick="const f=S._seguir;S._seguir=null;fechar();f&&f()">Lançar mesmo assim</button></div>`);
+}
+// Clientes / fornecedores
+function checaCad(tab,f,id){
+  const res={b:[],a:[]},um=CAD[tab].um,lk=y=>`<b>${esc(y.nome)}</b> <a href="#" onclick="fechar();formCad('${tab}','${y.id}');return false">abrir</a>`;
+  const doc=soDig(f.documento),mail=String(f.email||'').trim().toLowerCase(),nm=semAc(f.nome);
+  const tels=String(f.telefone||'').split(/[\/;,]/).map(x=>soDig(x).slice(-8)).filter(x=>x.length===8);
+  if(doc&&doc.length!==11&&doc.length!==14)res.a.push(`O CPF/CNPJ informado tem ${doc.length} números (CPF tem 11 e CNPJ tem 14). Confira se foi digitado certo.`);
+  S[tab].forEach(y=>{if(y.id===id)return;const ydoc=soDig(y.documento);
+    if(doc.length>=11&&ydoc===doc)return res.b.push(`Já existe ${um} com este CPF/CNPJ: ${lk(y)}`);
+    if(mail&&String(y.email||'').trim().toLowerCase()===mail)return res.a.push(`Mesmo e-mail de ${lk(y)}`);
+    const yt=String(y.telefone||'').split(/[\/;,]/).map(x=>soDig(x).slice(-8));
+    if(tels.some(t=>yt.includes(t)))return res.a.push(`Mesmo telefone de ${lk(y)}`);
+    const yn=semAc(y.nome);
+    if(nm.length>=4&&yn===nm)return res.a.push(`Já existe ${um} com o mesmo nome: ${lk(y)}`);
+    if(nm.length>=8&&yn.length>=8&&(yn.includes(nm)||nm.includes(yn)))res.a.push(`Nome parecido com ${lk(y)}`)});
+  res.a=res.a.slice(0,4);return res;
+}
+// Produtos
+function checaProd(d,id){
+  const res={b:[],a:[]},c=normTxt(d.codigo),n=semAc(d.nome),lk=p=>`<b>${esc(p.nome)}</b> <a href="#" onclick="fechar();formProd('${p.id}');return false">abrir</a>`;
+  S.produtos.forEach(p=>{if(p.id===id)return;
+    if(c&&normTxt(p.codigo)===c)res.b.push(`O código <b>${esc(d.codigo)}</b> já é do produto ${lk(p)}`);
+    else if(n.length>=3&&semAc(p.nome)===n&&semAc(p.descricao)===semAc(d.descricao))res.a.push(`Já existe um produto com o mesmo nome: ${lk(p)}`)});
+  if(d.preco>0&&d.custo>0&&d.preco<d.custo)res.a.push(`O preço de venda (${R(d.preco)}) está <b>menor que o custo</b> (${R(d.custo)}).`);
+  return res;
+}
+// Notas fiscais já lançadas (entradas)
+async function checaNF({numero,chave,fornId,fornNome}){
+  const res={b:[],a:[]},eid=S.empresa.id;
+  if(chave){const ja=await q(sb.from('movimentos').select('data').eq('empresa_id',eid).ilike('obs','%'+chave+'%').limit(1));
+    if(ja.length){res.b.push(`A NF-e <b>${esc(numero)}</b> (mesma chave de acesso) já foi lançada ${ha(ja[0].data)}.`);return res}}
+  if(!numero)return res;
+  const n=String(+numero);
+  const ms=(await q(sb.from('movimentos').select('data,obs,fornecedor_id').eq('empresa_id',eid).eq('tipo','entrada').ilike('obs','%'+n+'%').order('data',{ascending:false}).limit(60))).filter(m=>temNF(m.obs,n));
+  const mesmo=ms.find(m=>fornId&&m.fornecedor_id===fornId);
+  if(mesmo)res.b.push(`A nota <b>${esc(n)}</b> de <b>${esc(fornNome||nomeForn(fornId)||'')}</b> já teve entrada no estoque ${ha(mesmo.data)}.`);
+  else if(ms.length)res.a.push(`Já existe entrada com a nota <b>${esc(n)}</b> ${ms[0].fornecedor_id?'de '+esc(nomeForn(ms[0].fornecedor_id)||'outro fornecedor'):'(sem fornecedor)'} ${ha(ms[0].data)}. Confira se não é a mesma nota.`);
+  if(!res.b.length){const ls=(await q(sb.from('lancamentos').select('descricao,valor,vencimento,fornecedor_id').eq('empresa_id',eid).eq('tipo','pagar').ilike('descricao','%'+n+'%').limit(30))).filter(l=>temNF(l.descricao,n)&&(!fornId||!l.fornecedor_id||l.fornecedor_id===fornId));
+    if(ls.length)res.a.push(`A nota <b>${esc(n)}</b> já aparece no financeiro: "${esc(ls[0].descricao)}" ${R(+ls[0].valor)}.`)}
+  return res;
+}
+// Entradas e saídas manuais
+async function checaMov(f,tipo){
+  const res={b:[],a:[]};
+  if(tipo==='entrada'){const ns=nfNums(f.o);for(const n of ns){const r=await checaNF({numero:n,fornId:f.f||null});res.b.push(...r.b);res.a.push(...r.a)}}
+  const desde=new Date(Date.now()-864e5).toISOString();
+  const ms=await q(sb.from('movimentos').select('data,qtd,fornecedor_id,obs').eq('empresa_id',S.empresa.id).eq('tipo',tipo).eq('produto_id',f.p).gte('data',desde).order('data',{ascending:false}).limit(20));
+  const ig=ms.find(m=>+m.qtd===+f.q&&(tipo!=='entrada'||(m.fornecedor_id||'')===(f.f||'')));
+  if(ig)res.a.push(`Você já lançou ${tipo==='entrada'?'uma entrada':'uma saída'} igual de <b>${N(+f.q)} ${esc((P(f.p)||{}).unidade||'')}</b> de <b>${esc((P(f.p)||{}).nome||'')}</b> ${ha(ig.data)}.`);
+  return res;
+}
+// Financeiro (contas a pagar / receber / caixa)
+async function checaLanc(d,tipo,id){
+  const res={b:[],a:[]},eid=S.empresa.id,pes=tipo==='receber'?d.cliente_id:d.fornecedor_id,campo=tipo==='receber'?'cliente_id':'fornecedor_id';
+  const ls=(await q(sb.from('lancamentos').select('id,descricao,valor,vencimento,pago,cliente_id,fornecedor_id').eq('empresa_id',eid).eq('tipo',tipo).eq('valor',d.valor).limit(200))).filter(l=>l.id!==id);
+  const quem=pes?(tipo==='receber'?nomeCli(pes):nomeForn(pes)):'';
+  const igual=ls.find(l=>l.vencimento===d.vencimento&&(l[campo]||null)===(pes||null)&&semAc(l.descricao)===semAc(d.descricao));
+  if(igual)res.b.push(`Já existe o lançamento "<b>${esc(igual.descricao)}</b>" de ${R(d.valor)} com a mesma data${quem?' para '+esc(quem):''}${igual.pago?' (já '+(tipo==='receber'?'recebido':'pago')+')':''}.`);
+  else{const p=ls.find(l=>(l[campo]||null)===(pes||null)&&(l.vencimento===d.vencimento||semAc(l.descricao)===semAc(d.descricao)));
+    if(p)res.a.push(`Já existe "<b>${esc(p.descricao)}</b>" de ${R(d.valor)} vencendo em ${new Date(p.vencimento+'T12:00').toLocaleDateString('pt-BR')}${quem?' para '+esc(quem):''}${p.pago?' (já '+(tipo==='receber'?'recebido':'pago')+')':''}.`)}
+  if(tipo==='pagar'){for(const n of nfNums(d.descricao)){const ns=(await q(sb.from('lancamentos').select('id,descricao,valor,fornecedor_id').eq('empresa_id',eid).eq('tipo','pagar').ilike('descricao','%'+n+'%').limit(30))).filter(l=>l.id!==id&&temNF(l.descricao,n)&&(!pes||!l.fornecedor_id||l.fornecedor_id===pes));
+    if(ns.length&&!res.b.length)res.a.push(`A nota <b>${esc(n)}</b> já está no financeiro: "${esc(ns[0].descricao)}" ${R(+ns[0].valor)}. Notas importadas pelo XML já lançam as parcelas sozinhas.`)}}
+  return res;
+}
+// Vendas (PDV): mesma venda repetida em poucos minutos
+function checaVenda(){
+  const res={b:[],a:[]},F=S.pdvF,lim=Date.now()-15*6e4,chave=it=>it.map(i=>i.produto_id+':'+(+i.qtd)).sort().join('|'),meu=chave(S.cart);
+  const v=S.vendas.find(v=>!v.cancelada&&new Date(v.data)>lim&&(v.cliente_id||'')===(F.cli||'')&&chave(v.itens)===meu);
+  if(v)res.a.push(`A venda <b>#${v.numero}</b> com os mesmos itens${F.cli?' para '+esc(nomeCli(F.cli)):''} foi registrada ${ha(v.data)} (${R(v.total)}).`);
+  return res;
+}
 
 // ---- Importar XML de NF-e (entrada de compras)
 const soDig=v=>String(v||'').replace(/\D/g,'');
@@ -503,9 +599,10 @@ async function abrirXML(inp){
   const file=inp.files&&inp.files[0];inp.value='';if(!file)return;
   try{
     const nf=lerNFe(await file.text());
-    if(nf.chave){const ja=await q(sb.from('movimentos').select('id,data').eq('empresa_id',S.empresa.id).ilike('obs','%'+nf.chave+'%').limit(1));
-      if(ja.length)return toast('Esta NF-e ('+nf.numero+') já foi importada em '+new Date(ja[0].data).toLocaleDateString('pt-BR'),1)}
     nf.fornId=(S.fornecedores.find(f=>soDig(f.documento)&&soDig(f.documento)===soDig(nf.forn.documento))||{}).id||'';
+    const r=await checaNF({numero:nf.numero,chave:nf.chave,fornId:nf.fornId,fornNome:nf.forn.nome});
+    if(r.b.length)return dupModal(r,'Esta nota já foi lançada');
+    nf.avisos=r.a;
     nf.itens.forEach(it=>{const p=acharProdNFe(it);it.prod=p?p.id:'__novo'});
     S._nfe=nf;telaNFe();
   }catch(e){erro(e)}
@@ -517,6 +614,7 @@ function telaNFe(){
   <p style="color:var(--muted);margin:4px 0 12px;font-size:13px">Emitida em ${nf.emissao?new Date(nf.emissao+'T12:00').toLocaleDateString('pt-BR'):'—'} · <b style="color:var(--text)">${esc(nf.forn.nome)}</b> ${esc(nf.forn.documento)}<br>
   ${nf.fornId?'✅ Fornecedor já cadastrado':'➕ Fornecedor novo — será cadastrado automaticamente'} · Produtos ${R(nf.vProd)}${nf.vFrete?' · Frete '+R(nf.vFrete):''}${nf.vDesc?' · Desconto '+R(nf.vDesc):''} · <b style="color:var(--text)">Total ${R(nf.vNF)}</b></p>
   <form id="fnfe" class="f" onsubmit="event.preventDefault();gravarNFe(this)">
+  ${(nf.avisos||[]).length?`<div class="dupx" style="grid-column:1/-1" data-k='${esc(JSON.stringify(nf.avisos))}'><div class="dupav"><b>⚠️ Atenção — confira antes de salvar (possível duplicidade ou erro)</b>${nf.avisos.map(x=>`<div>• ${x}</div>`).join('')}<label class="dupchk"><input type="checkbox" class="dupok"> Conferi: está correto e <u>não</u> é duplicado — quero salvar</label></div></div>`:''}
   <div class="tw c2" style="max-height:42vh;overflow:auto"><table><tr><th>Item da nota</th><th class="num">Qtd</th><th class="num">Custo un.</th><th>Vincular ao produto</th></tr>
   ${nf.itens.map((it,ix)=>`<tr><td><b>${esc(it.nome)}</b><div style="color:var(--muted);font-size:12px">Cód. ${esc(it.codigo)}${it.lote?' · Lote '+esc(it.lote):''}</div></td><td class="num">${N(it.qtd)} ${esc(it.uCom)}</td><td class="num">${R(it.custo)}</td><td><select name="m${ix}" style="min-width:200px">${optsP(it.prod)}</select></td></tr>`).join('')}</table></div>
   ${difer?`<label class="c2" style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" name="ratear" checked style="width:auto"> Somar frete/descontos no custo dos produtos (custo real de cada item)</label>`:''}
@@ -527,6 +625,8 @@ function telaNFe(){
   <div class="row c2" style="margin-top:6px"><span class="sp"></span><button type="button" class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bnfe">⬇️ Dar entrada em ${nf.itens.length} item(ns)</button></div></form>`);
 }
 function gravarNFe(form){const nf=S._nfe,f=Object.fromEntries(new FormData(form));busy($('#bnfe'),async()=>{
+  const r=await checaNF({numero:nf.numero,chave:nf.chave,fornId:nf.fornId,fornNome:nf.forn.nome});r.a=nf.avisos||[];
+  if(!dupBox(form,r))return;
   if(f.pg==='pago'&&!f.cta)return toast(MULTI()?'Escolha a conta usada no pagamento':'Caixa não encontrado. Atualize a página.',1);
   const eid=S.empresa.id,fat=f.ratear&&nf.vProd>0?nf.vNF/nf.vProd:1,obs=`NF-e ${nf.numero}${nf.serie?'/'+nf.serie:''} · chave ${nf.chave}`;
   let fid=nf.fornId;
@@ -760,15 +860,10 @@ function formCad(tab,id,rapido){
   const c=CAD[tab],x=id?S[tab].find(y=>y.id===id):{};
   modal(`<h3>${id?'Editar':'Novo'} ${c.um}</h3><form id="fc" class="f" style="grid-template-columns:1fr 1fr">${c.campos.map(([k,l,w])=>`<div ${w?'style="grid-column:span 2"':''}><label>${l}</label><input name="${k}" value="${esc(x[k]||'')}" ${k==='nome'?'required':''} ${k==='email'?'type="email"':''}></div>`).join('')}
   <div class="row" style="grid-column:span 2">${id?`<button type="button" class="btn d" onclick="fechar();confirmar('Excluir este ${c.um}? O histórico é mantido.',()=>delCad('${tab}','${id}'))">Excluir</button>`:''}<span class="sp"></span><button type="button" class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bc">Salvar</button></div></form>`);
-  let forcar=false;
-  const avisar=()=>{const f=Object.fromEntries(new FormData($('#fc')));const d=dupCad(tab,f,id);let box=$('#dupbox');
-    if(!d.length){if(box)box.remove();forcar=false;$('#bc').textContent='Salvar';return d}
-    if(!box){box=document.createElement('div');box.id='dupbox';box.style.gridColumn='span 2';$('#fc').lastElementChild.before(box)}
-    box.innerHTML=`<div class="dupav"><b>⚠️ Parece que este ${c.um} já está cadastrado:</b>${d.slice(0,3).map(([y,m])=>`<div>• <b>${esc(y.nome)}</b>${y.telefone?' · '+esc(y.telefone):''}${y.documento?' · '+esc(y.documento):''} <span style="color:var(--muted)">(${m})</span> <a href="#" onclick="fechar();formCad('${tab}','${y.id}');return false">abrir</a></div>`).join('')}<div style="color:var(--muted);font-size:12px;margin-top:4px">Se for outra pessoa, toque em "Salvar mesmo assim".</div></div>`;
-    $('#bc').textContent='Salvar mesmo assim';return d};
-  ['nome','documento','telefone'].forEach(k=>{const el=$('#fc [name='+k+']');if(el)el.addEventListener('change',avisar)});
+  const avisar=()=>{const f=Object.fromEntries(new FormData($('#fc')));const r=checaCad(tab,f,id);const box=$('#fc .dupx');if(r.b.length||r.a.length)dupBox($('#fc'),r);else if(box)box.remove()};
+  ['nome','documento','telefone','email'].forEach(k=>{const el=$('#fc [name='+k+']');if(el)el.addEventListener('change',avisar)});
   $('#fc').onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));Object.keys(f).forEach(k=>f[k]=f[k].trim()||null);
-    if(!forcar&&avisar().length){forcar=true;return}
+    if(!dupBox(e.target,checaCad(tab,f,id)))return;
     busy($('#bc'),async()=>{
       let nid=id;
       if(id)await q(sb.from(tab).update(f).eq('id',id));
@@ -904,8 +999,9 @@ function formLanc(id,pre){
   <div class="row" style="grid-column:span 2">${id?`<button type="button" class="btn d" onclick="fechar();confirmar('Excluir este lançamento?',()=>delLanc('${id}'))">Excluir</button>`:''}<span class="sp"></span><button type="button" class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bl">Salvar</button></div></form>`);
   $('#fl').onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));
     const d={descricao:f.descricao.trim(),valor:+f.valor,vencimento:f.vencimento,categoria:f.categoria,cliente_id:rec?(f.pessoa||null):null,fornecedor_id:rec?null:(f.pessoa||null)};
+    const fm=e.target;
     if(!id&&f.pago){if(!f.conta_id)return toast(MULTI()?'Cadastre uma conta bancária primeiro':'Caixa não encontrado. Atualize a página.',1);Object.assign(d,{pago:true,data_pagamento:doCaixa?f.vencimento:today(),conta_id:f.conta_id})}
-    busy($('#bl'),async()=>{if(id)await q(sb.from('lancamentos').update(d).eq('id',id));else await q(sb.from('lancamentos').insert({...d,tipo:t,empresa_id:S.empresa.id}));await recarregar();fechar();toast('Lançamento salvo');render()});
+    busy($('#bl'),async()=>{if(!dupBox(fm,await checaLanc(d,t,id)))return;if(id)await q(sb.from('lancamentos').update(d).eq('id',id));else await q(sb.from('lancamentos').insert({...d,tipo:t,empresa_id:S.empresa.id}));await recarregar();fechar();toast('Lançamento salvo');render()});
   };
 }
 async function delLanc(id){try{await q(sb.from('lancamentos').delete().eq('id',id));await recarregar();toast('Lançamento excluído');render()}catch(e){erro(e)}}
