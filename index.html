@@ -1037,6 +1037,7 @@ async function histCli(id){
 
 // ---- Financeiro
 VIEWS.financeiro=async()=>{
+  try{S._pb=await rpc('pode_baixar',{p_empresa:S.empresa.id});S._resp=(await q(sb.from('membros').select('email').eq('empresa_id',S.empresa.id).eq('financeiro',true))).map(m=>m.email)}catch(e){S._pb=true;S._resp=[]}
   if(!MULTI()&&S.finTab==='contas')S.finTab='caixa';if(MULTI()&&S.finTab==='caixa')S.finTab='contas';
   const t=S.finTab;
   const tabs=`<div class="tabs" style="max-width:520px">${[MULTI()?['contas','🏦 Contas bancárias']:['caixa','💵 Caixa do dia'],['receber','⬇️ A receber'],['pagar','⬆️ A pagar']].map(([k,l])=>`<button class="${t===k?'on':''}" onclick="S.finTab='${k}';render()">${l}</button>`).join('')}</div>`;
@@ -1055,11 +1056,12 @@ VIEWS.financeiro=async()=>{
   const l=(await q(qq.order(F==='pagos'?'data_pagamento':'vencimento',{ascending:F!=='pagos'}).limit(300))).map(x=>({...x,valor:+x.valor}));
   S._lanc=l;const rec=t==='receber';
   return `<div class="row"><div><h1>${MULTI()?'Financeiro':'Caixa'}</h1><p class="sub">${rec?'O que seus clientes devem e o que já entrou.':'Contas, boletos e fornecedores a pagar.'}</p></div><span class="sp"></span><button class="btn p" onclick="formLanc()">+ Nova conta a ${t}</button></div>${tabs}
+  ${S._resp&&S._resp.length?`<div class="card" style="margin-bottom:12px;padding:10px 14px;font-size:13px">🔒 Baixas neste financeiro: somente <b>${S._resp.map(esc).join(', ')}</b>${S._pb?' (você)':''}.</div>`:''}
   <div class="card"><div class="row"><select style="width:auto" onchange="S.finFiltro=this.value;render()">${[['abertos','Em aberto'],['vencidos','Vencidos'],['pagos',rec?'Recebidos':'Pagos'],['todos','Todos']].map(([k,n])=>`<option value="${k}" ${F===k?'selected':''}>${n}</option>`).join('')}</select><span class="sp"></span><b>Total: ${R(l.reduce((s,x)=>s+x.valor,0))}</b></div></div>
   <div class="card tw" style="margin-top:16px"><table><tr><th>Vencimento</th><th>Descrição</th><th>${rec?'Cliente':'Fornecedor'}</th><th>Conta</th><th class="num">Valor</th><th>Situação</th><th></th></tr>
   ${l.map(x=>{const venc=!x.pago&&x.vencimento<today();const st=x.pago?[rec?'Recebido':'Pago','t-ok']:venc?['Vencido','t-bad']:x.vencimento===today()?['Vence hoje','t-warn']:['Em aberto','t-blue'];
     return `<tr><td>${DD(x.vencimento)}</td><td><b>${esc(x.descricao)}</b>${x.categoria?`<div style="color:var(--muted);font-size:12px">${esc(x.categoria)}</div>`:''}</td><td>${esc((rec?nomeCli(x.cliente_id):nomeForn(x.fornecedor_id))||'—')}</td><td>${esc(nomeConta(x.conta_id)||'—')}${x.pago&&x.data_pagamento?`<div style="color:var(--muted);font-size:12px">em ${DD(x.data_pagamento)}</div>`:''}</td><td class="num"><b>${R(x.valor)}</b></td><td><span class="tag ${st[1]}">${st[0]}</span></td>
-    <td class="num" style="white-space:nowrap">${x.pago?`<button class="btn sm" onclick="reabrir('${x.id}')">Desfazer</button>`:`<button class="btn sm p" onclick="baixar('${x.id}')">${rec?'Receber':'Pagar'}</button>`} ${x.venda_id?'':`<button class="btn sm" onclick="formLanc('${x.id}')">Editar</button>`}</td></tr>`}).join('')||'<tr><td colspan="7" class="empty">Nada por aqui</td></tr>'}</table></div>`;
+    <td class="num" style="white-space:nowrap">${!S._pb?'<span class="tag" title="Somente o responsável pelo financeiro dá baixa">🔒</span>':x.pago?`<button class="btn sm" onclick="reabrir('${x.id}')">Desfazer</button>`:`<button class="btn sm p" onclick="baixar('${x.id}')">${rec?'Receber':'Pagar'}</button>`} ${x.venda_id?'':`<button class="btn sm" onclick="formLanc('${x.id}')">Editar</button>`}</td></tr>`}).join('')||'<tr><td colspan="7" class="empty">Nada por aqui</td></tr>'}</table></div>`;
 };
 async function caixaDia(tabs){
   const dia=S.caixaDia||(S.caixaDia=today());
@@ -1158,11 +1160,12 @@ async function reabrir(id){try{await q(sb.from('lancamentos').update({pago:false
 // ---- Equipe
 VIEWS.equipe=async()=>{
   const ms=await q(sb.from('membros').select('*').eq('empresa_id',S.empresa.id));
-  return `<h1>Equipe</h1><p class="sub">Dê acesso para funcionários. <b>Vendedor</b> só vende e consulta; <b>Dono</b> faz tudo.</p>
+  return `<h1>Equipe</h1><p class="sub">Dê acesso para funcionários. <b>Vendedor</b> só vende e consulta; <b>Dono</b> faz tudo. Marque quem <b>dá baixa no financeiro</b>; se ninguém estiver marcado, qualquer dono dá baixa.</p>
   <div class="card"><h3>Adicionar pessoa</h3><p style="color:var(--muted);margin-bottom:12px;font-size:13px">1) A pessoa abre o sistema e clica em <b>Criar conta</b> (sem cadastrar empresa). 2) Você digita o e-mail dela aqui.</p>
   <form class="f" onsubmit="event.preventDefault();addMembro(this)"><div class="c2"><label>E-mail</label><input name="email" type="email" required></div><div><label>Papel</label><select name="papel"><option value="vendedor">Vendedor</option><option value="dono">Dono</option></select></div><div style="align-self:end"><button class="btn p" style="width:100%">Adicionar</button></div></form></div>
-  <div class="card tw" style="margin-top:16px"><table><tr><th>E-mail</th><th>Papel</th><th></th></tr>${ms.map(m=>`<tr><td>${esc(m.email)}${m.user_id===S.user.id?' <span class="tag t-blue">você</span>':''}</td><td>${m.papel==='dono'?'Dono':'Vendedor'}</td><td class="num">${m.user_id!==S.user.id?`<button class="btn sm d" onclick="confirmar('Remover o acesso de ${esc(m.email)}?',()=>remMembro('${m.user_id}'))">Remover</button>`:''}</td></tr>`).join('')}</table></div>`;
+  <div class="card tw" style="margin-top:16px"><table><tr><th>E-mail</th><th>Papel</th><th title="Quem pode dar e desfazer baixas no financeiro desta empresa">Dá baixa no financeiro</th><th></th></tr>${ms.map(m=>`<tr><td>${esc(m.email)}${m.user_id===S.user.id?' <span class="tag t-blue">você</span>':''}</td><td>${m.papel==='dono'?'Dono':'Vendedor'}</td><td>${m.papel==='dono'?`<label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" style="width:18px;height:18px" ${m.financeiro?'checked':''} onchange="defFin('${m.user_id}',this.checked)"> ${m.financeiro?'Sim':'—'}</label>`:'—'}</td><td class="num">${m.user_id!==S.user.id?`<button class="btn sm d" onclick="confirmar('Remover o acesso de ${esc(m.email)}?',()=>remMembro('${m.user_id}'))">Remover</button>`:''}</td></tr>`).join('')}</table></div>`;
 };
+async function defFin(uid,v){try{await rpc('definir_financeiro',{p_empresa:S.empresa.id,p_user:uid,p_valor:v});toast(v?'Pode dar baixa no financeiro':'Baixa removida');render()}catch(e){erro(e);render()}}
 function addMembro(form){const f=Object.fromEntries(new FormData(form));busy(form.querySelector('button'),async()=>{await rpc('adicionar_membro',{p_empresa:S.empresa.id,p_email:f.email,p_papel:f.papel});toast('Acesso liberado para '+f.email);render()})}
 async function remMembro(uid){try{await rpc('remover_membro',{p_empresa:S.empresa.id,p_user:uid});toast('Acesso removido');render()}catch(e){erro(e)}}
 
