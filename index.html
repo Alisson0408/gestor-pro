@@ -406,7 +406,10 @@ function finalizar(b,conferido){
     if(fiado&&!F.cli)return toast('Escolha ou cadastre o cliente para vender fiado',1);
     const r=await rpc('registrar_venda',{p_empresa:S.empresa.id,p_itens:S.cart.map(i=>({produto_id:i.produto_id,qtd:i.qtd})),p_desconto:+F.desc||0,p_pagamento:F.pg,p_cliente:null,
       p_cliente_id:F.cli||null,p_conta:fiado?null:(F.conta||null),p_vencimento:fiado?(F.venc||addDays(today(),30)):null,p_paciente:F.pac||null,p_ficha:F.fic||null,p_entrada:F.ent||null});
-    if(F.os){try{await q(sb.from('ordens_servico').update({status:'entregue',venda_id:r.id}).eq('id',F.os))}catch(e){}}
+    if(F.os){try{const o=(await q(sb.from('ordens_servico').select('numero,componentes,componentes_baixados').eq('id',F.os)))[0];let falhas=[];
+      if(o&&!o.componentes_baixados){for(const c of (o.componentes||[]).filter(c=>!c.cobrar)){try{await rpc('registrar_saida',{p_produto:c.produto_id,p_qtd:+c.qtd,p_motivo:'Uso na OS '+o.numero,p_obs:null})}catch(e){falhas.push((P(c.produto_id)||{}).nome||'componente')}}}
+      await q(sb.from('ordens_servico').update({status:'entregue',venda_id:r.id,componentes_baixados:true}).eq('id',F.os));
+      if(falhas.length)setTimeout(()=>toast('Sem estoque para dar baixa em: '+falhas.join(', ')+'. Lance a saída manualmente.',1),1500)}catch(e){}}
     S.cart=[];S.busca='';S.pdvF={...S.pdvF,desc:0,cli:'',venc:'',pac:'',fic:'',ent:'',os:null};await recarregar();render();cupom(r.id);toast('Venda #'+r.numero+' registrada');
   });
 }
@@ -853,6 +856,11 @@ function formOS(id){
     <div style="grid-column:span 4;font-weight:700;margin-top:4px">Componentes</div>
     ${inp('ucla_cliente','UCLA do cliente')}${inp('analogo_cliente','Análogo do cliente')}${inp('parafuso_cliente','Parafuso do cliente')}${inp('secao','Seção')}
     ${inp('ucla_lab','UCLA do laboratório')}${inp('analogo_lab','Análogo do laboratório')}${inp('parafuso_lab','Parafuso do laboratório')}<div></div>
+    <div style="grid-column:span 4;margin-top:6px;border:1px solid var(--line);border-radius:12px;padding:10px">
+      <div class="row"><b>Componentes do estoque do laboratório</b><span class="sp"></span>${o.componentes_baixados?'<span class="tag t-ok">Baixa feita no estoque</span>':''}</div>
+      <p style="color:var(--muted);font-size:12.5px;margin:4px 0 8px">Saem do estoque ao <b>Finalizar</b> a ficha. Marque "Cobrar" para incluir na venda da clínica.</p>
+      <div id="oscomp"></div>${o.componentes_baixados?'':'<button type="button" class="btn sm" onclick="osCompLinha()">+ Componente</button>'}
+    </div>
     <div style="grid-column:span 4;font-weight:700;margin-top:4px">Provas (idas e voltas)</div>
     ${inp('rd1','Retorno p/ dentista 1','date')}${inp('rd2','Retorno p/ dentista 2','date')}${inp('rd3','Retorno p/ dentista 3','date')}<div></div>
     ${inp('rl1','Retorno p/ laboratório 1','date')}${inp('rl2','Retorno p/ laboratório 2','date')}${inp('rl3','Retorno p/ laboratório 3','date')}<div></div>
@@ -861,10 +869,20 @@ function formOS(id){
   </form>
   <div class="row" style="margin-top:12px">${id&&dono()?`<button class="btn d" onclick="fechar();confirmar('Excluir a ficha ${esc(o.numero)}?',()=>delOS('${id}'))">Excluir</button>`:''}${id?`<button class="btn" onclick="imprimirOS('${id}')">🖨️ Imprimir</button>`:''}<span class="sp"></span><button class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bos2" onclick="salvarOS('${id||''}')">Salvar</button></div>`);
   $('#mbox').style.width='min(980px,100%)';if(!id)$('#fos [name=numero]').placeholder='Automático';
+  S._osCompTrava=!!o.componentes_baixados;(o.componentes||[]).forEach(c=>osCompLinha(c));
+}
+const prodsEst=()=>S.produtos.filter(p=>!servico(p)&&p.ativo!==false);
+function osCompLinha(c={}){
+  const d=document.createElement('div');d.className='oscl';d.style.cssText='display:grid;grid-template-columns:1fr 80px 90px 34px;gap:6px;align-items:center;margin-bottom:6px';
+  const dis=S._osCompTrava?'disabled':'';
+  d.innerHTML=`<select class="ocp" ${dis}><option value="">Escolha o produto</option>${prodsEst().map(p=>`<option value="${p.id}" ${p.id===c.produto_id?'selected':''}>${esc(p.nome)}${p.descricao?' '+esc(p.descricao):''} (est. ${N(p.estoque)})</option>`).join('')}</select><input class="ocq" type="number" min="1" step="any" value="${c.qtd||1}" ${dis}><label style="display:flex;gap:4px;align-items:center;font-size:12.5px"><input type="checkbox" class="occ" style="width:16px;height:16px" ${c.cobrar?'checked':''} ${dis}> Cobrar</label>${S._osCompTrava?'':'<button type="button" class="btn sm d" onclick="this.parentNode.remove()">×</button>'}`;
+  $('#oscomp').appendChild(d);
+  if(!prodsEst().length&&!c.produto_id)$('#oscomp').insertAdjacentHTML('beforeend','<p style="color:var(--warn);font-size:12.5px">Cadastre os componentes (UCLA, análogo, parafuso…) em Produtos, com categoria que não seja "Serviço", e lance a entrada no estoque.</p>');
 }
 function salvarOS(id){
   const fm=$('#fos'),d={};
-  [...fm.elements].forEach(e=>{if(!e.name)return;if(e.type==='checkbox')d[e.name]=e.checked;else if(e.tagName==='SELECT'&&(e.name==='antagonista'||e.name==='registro'))d[e.name]=e.value===''?null:e.value==='true';else if(e.type==='number')d[e.name]=e.value===''?null:+e.value;else d[e.name]=e.value.trim()||null});
+  if(!S._osCompTrava)d.componentes=[...document.querySelectorAll('#oscomp .oscl')].map(l=>({produto_id:l.querySelector('.ocp').value,qtd:+l.querySelector('.ocq').value||0,cobrar:l.querySelector('.occ').checked})).filter(c=>c.produto_id&&c.qtd>0);
+  [...fm.elements].forEach(e=>{if(!e.name||e.closest('#oscomp'))return;if(e.type==='checkbox')d[e.name]=e.checked;else if(e.tagName==='SELECT'&&(e.name==='antagonista'||e.name==='registro'))d[e.name]=e.value===''?null:e.value==='true';else if(e.type==='number')d[e.name]=e.value===''?null:+e.value;else d[e.name]=e.value.trim()||null});
   busy($('#bos2'),async()=>{
     if(id)await q(sb.from('ordens_servico').update(d).eq('id',id));
     else{const r=await q(sb.from('ordens_servico').insert({...d,empresa_id:S.empresa.id}).select('numero'));toast('Ficha '+(r[0]&&r[0].numero||'')+' criada')}
@@ -875,6 +893,7 @@ async function delOS(id){try{await q(sb.from('ordens_servico').delete().eq('id',
 function finalizarOS(id){
   const o=(S._os||[]).find(x=>x.id===id);if(!o)return;
   S.cart=[];S.pdvF={...S.pdvF,cli:o.cliente_id||'',pac:o.paciente||'',fic:o.numero||'',ent:o.data_entrada||'',os:o.id,pg:o.cliente_id?'Fiado':S.pdvF.pg};
+  if(!o.componentes_baixados)(o.componentes||[]).filter(c=>c.cobrar).forEach(c=>{const p=P(c.produto_id);if(p)S.cart.push({produto_id:p.id,nome:p.nome,qtd:+c.qtd,preco:p.preco})});
   go('pdv');toast('Escolha os serviços da ficha '+o.numero+' e finalize a venda');
 }
 async function imprimirOS(id){
