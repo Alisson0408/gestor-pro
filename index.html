@@ -61,7 +61,7 @@ tr:hover td{background:rgba(91,140,255,.04)}
 .btn.d{color:var(--bad)}.btn.sm{padding:6px 10px;font-size:12px}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.sp{flex:1}
 label{display:block;font-size:12px;color:var(--muted);font-weight:600;margin-bottom:5px}
-input,select{width:100%;background:#0c1328;border:1px solid var(--line);border-radius:10px;padding:10px 12px;outline:none}
+input,select,textarea{width:100%;color:inherit;font:inherit;background:#0c1328;border:1px solid var(--line);border-radius:10px;padding:10px 12px;outline:none}
 input:focus,select:focus{border-color:var(--brand)}
 .f{display:grid;gap:12px;grid-template-columns:repeat(4,1fr)}.f .c2{grid-column:span 2}
 .empty{color:var(--muted);text-align:center;padding:26px}
@@ -106,6 +106,7 @@ input:focus,select:focus{border-color:var(--brand)}
 .eqp .n{flex:1;min-width:0}.eqp .n b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .eqp input{width:64px;text-align:center;padding:7px}
 #printArea{display:none}
+@media(max-width:700px){#fos{grid-template-columns:1fr 1fr!important}#fos>[style*='span 4'],#fos>[style*='span 2']{grid-column:span 2!important}}
 .rsdoc{background:#fff;color:#1d2433;font-size:12px;line-height:1.45;padding:10px 12px;font-family:Inter,Arial,sans-serif}
 .rs-h{display:flex;justify-content:space-between;gap:16px;border-bottom:2px solid #1d2433;padding-bottom:8px;margin-bottom:8px}
 .rs-emp{font-size:16px;font-weight:800}.rs-tit{font-size:18px;font-weight:800;text-align:right}.rs-sub{font-size:11px;color:#5d6782;font-weight:500}
@@ -150,7 +151,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const today=()=>{const d=new Date();return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
 const addDays=(iso,n)=>{const d=new Date((iso||today())+'T12:00');d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)};
 function toast(m,err){const t=$('#toast');t.textContent=m;t.className='toast show'+(err?' err':'');clearTimeout(t._);t._=setTimeout(()=>t.className='toast',3200);return false}
-function modal(html){$('#mbox').innerHTML=html;$('#modal').classList.add('show')}
+function modal(html){$('#mbox').style.width='';$('#mbox').innerHTML=html;$('#modal').classList.add('show')}
 function fechar(){$('#modal').classList.remove('show')}
 $('#modal').addEventListener('click',e=>{if(e.target.id==='modal')fechar()});
 function confirmar(msg,fn){modal(`<h3>Confirmar</h3><p style="margin:10px 0 18px;color:var(--muted)">${msg}</p><div class="row"><span class="sp"></span><button class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="okc">Confirmar</button></div>`);$('#okc').onclick=()=>{fechar();fn()}}
@@ -292,9 +293,9 @@ function telaBloqueio(){
 async function sair(){await sb.auth.signOut();S.user=S.empresa=null;S.cart=[];S.view='painel';telaLogin()}
 
 // ============ APP ============
-const MENU=[['painel','📊','Painel'],['pdv','🛒','Vender (PDV)'],['produtos','📦','Produtos',1],['precificacao','🧮','Precificação',1],['entrada','⬇️','Entradas',1],['saida','⬆️','Saídas',1],['estoque','🗂️','Estoque'],['etiquetas','🏷️','Etiquetas'],['clientes','👤','Clientes'],['fornecedores','🚚','Fornecedores',1],['financeiro','🏦','Financeiro',1],['historico','🧾','Histórico'],['servexec','📑','Serviços executados',1],['equipe','👥','Equipe',1],['conta','💳','Minha conta']];
+const MENU=[['painel','📊','Painel'],['pdv','🛒','Vender (PDV)'],['os','🦷','Ordens de Serviço'],['produtos','📦','Produtos',1],['precificacao','🧮','Precificação',1],['entrada','⬇️','Entradas',1],['saida','⬆️','Saídas',1],['estoque','🗂️','Estoque'],['etiquetas','🏷️','Etiquetas'],['clientes','👤','Clientes'],['fornecedores','🚚','Fornecedores',1],['financeiro','🏦','Financeiro',1],['historico','🧾','Histórico'],['servexec','📑','Serviços executados',1],['equipe','👥','Equipe',1],['conta','💳','Minha conta']];
 function montarApp(){
-  const itens=S.empresa&&ativa(S.empresa)?MENU.filter(m=>!m[3]||dono()).map(m=>m[0]==='financeiro'&&!MULTI()?['financeiro','💵','Caixa',1]:m):[];
+  const itens=S.empresa&&ativa(S.empresa)?MENU.filter(m=>(!m[3]||dono())&&(m[0]!=='os'||S.empresa.os_ativo)).map(m=>m[0]==='financeiro'&&!MULTI()?['financeiro','💵','Caixa',1]:m):[];
   if(S.admin)itens.push(['admin','🛡️','Admin (clientes)']);
   $('#root').innerHTML=`<div class="app"><aside>${logo(S.empresa?S.empresa.nome:'Administrador')}${seletorEmpresa()}<nav id="nav">${itens.map(m=>`<button data-v="${m[0]}"><span class="ic">${m[1]}</span>${m[2]}</button>`).join('')}</nav>
   <div class="user">${esc(S.user.email)}<br>${S.papel?`<span class="tag t-blue" style="margin:6px 0">${S.papel==='dono'?'Dono':'Vendedor'}</span><br>`:''}<a href="#" onclick="sair();return false">Sair</a></div></aside><main id="main"></main></div>`;
@@ -405,7 +406,8 @@ function finalizar(b,conferido){
     if(fiado&&!F.cli)return toast('Escolha ou cadastre o cliente para vender fiado',1);
     const r=await rpc('registrar_venda',{p_empresa:S.empresa.id,p_itens:S.cart.map(i=>({produto_id:i.produto_id,qtd:i.qtd})),p_desconto:+F.desc||0,p_pagamento:F.pg,p_cliente:null,
       p_cliente_id:F.cli||null,p_conta:fiado?null:(F.conta||null),p_vencimento:fiado?(F.venc||addDays(today(),30)):null,p_paciente:F.pac||null,p_ficha:F.fic||null,p_entrada:F.ent||null});
-    S.cart=[];S.busca='';S.pdvF={...S.pdvF,desc:0,cli:'',venc:'',pac:'',fic:'',ent:''};await recarregar();render();cupom(r.id);toast('Venda #'+r.numero+' registrada');
+    if(F.os){try{await q(sb.from('ordens_servico').update({status:'entregue',venda_id:r.id}).eq('id',F.os))}catch(e){}}
+    S.cart=[];S.busca='';S.pdvF={...S.pdvF,desc:0,cli:'',venc:'',pac:'',fic:'',ent:'',os:null};await recarregar();render();cupom(r.id);toast('Venda #'+r.numero+' registrada');
   });
 }
 async function cupom(id){
@@ -742,7 +744,7 @@ async function relServ(cid){
   const w=waLink(c.telefone);
   modal(`<div style="max-height:70vh;overflow:auto;background:#fff;border-radius:10px;padding:6px">${doc}</div>
   <div class="row" style="margin-top:12px"><button class="btn" onclick="fechar()">Fechar</button><span class="sp"></span><button class="btn" onclick="copiarRelServ()">📋 Copiar resumo</button>${w?`<a class="btn" style="text-decoration:none" target="_blank" href="${w}?text=${encodeURIComponent(txtRelServ())}">📲 WhatsApp</a>`:''}<button class="btn p" onclick="imprimirRelServ()">🖨️ Imprimir / PDF</button></div>`);
-  $('#mbox').style.maxWidth='980px';
+  $('#mbox').style.width='min(980px,100%)';
 }
 function txtRelServ(){const r=S._rsDoc,F=S.rs,dt=x=>new Date(x+'T12:00').toLocaleDateString('pt-BR');return `*${r.emp.nome}*\nServiços executados de ${dt(F.de)} a ${dt(F.ate)}\nCliente: ${r.c.nome}\n\n${r.ln.map(l=>`• ${N(l.qtd)}x ${l.desc}${l.pac?' — Pac. '+l.pac:''} — ${R(l.valor)}`).join('\n')}\n\n*Total: ${R(r.total)}*\nPagamentos no período: ${R(r.pago)}\nDiferença: ${R(r.pago-r.total)}\n\nSegue o relatório em PDF. Qualquer dúvida estamos à disposição!`}
 function copiarRelServ(){navigator.clipboard.writeText(txtRelServ()).then(()=>toast('Resumo copiado!'),()=>toast('Não foi possível copiar',1))}
@@ -814,6 +816,76 @@ async function formCabecalho(){const e=await empDados();
   <div><label>Telefone</label><input name="tel" value="${esc(e.telefone||'')}" placeholder="(34) 3235-4800"></div><div><label>CNPJ</label><input name="doc" value="${esc(e.documento||'')}"></div>
   <div class="row" style="grid-column:span 2"><span class="sp"></span><button type="button" class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bcab">Salvar</button></div></form>`);
   $('#fcab').onsubmit=ev=>{ev.preventDefault();const f=Object.fromEntries(new FormData(ev.target));busy($('#bcab'),async()=>{await rpc('salvar_dados_empresa',{p_empresa:S.empresa.id,p_endereco:f.end,p_telefone:f.tel,p_documento:f.doc});fechar();toast('Dados salvos')})};
+}
+// ---- Ordens de Serviço (produção do laboratório)
+const OS_ST={recebido:['Recebido','t-blue'],producao:['Em produção','t-warn'],prova:['Em prova (dentista)','t-warn'],pronto:['Pronto','t-ok'],entregue:['Entregue','t-ok'],cancelado:['Cancelado','t-bad']};
+const osAberta=o=>!['entregue','cancelado'].includes(o.status);
+VIEWS.os=async()=>{
+  const F=S.osF||(S.osF={f:'abertas',b:''});
+  const ls=await q(sb.from('ordens_servico').select('*').eq('empresa_id',S.empresa.id).order('seq',{ascending:false}).limit(3000));S._os=ls;
+  const hj=today(),ab=ls.filter(osAberta);
+  const filt={abertas:o=>osAberta(o),atrasadas:o=>osAberta(o)&&o.prevista&&o.prevista<hj,hoje:o=>osAberta(o)&&o.prevista===hj,prova:o=>o.status==='prova',urgentes:o=>osAberta(o)&&o.urgente,prontas:o=>o.status==='pronto',entregues:o=>o.status==='entregue',todas:()=>true};
+  const b=F.b.toLowerCase();
+  const l=ls.filter(filt[F.f]).filter(o=>!b||[o.numero,o.paciente,o.dentista,o.trabalho,nomeCli(o.cliente_id)].join(' ').toLowerCase().includes(b)).sort((x,y)=>F.f==='entregues'||F.f==='todas'?0:(x.urgente===y.urgente?(x.prevista||'9')<(y.prevista||'9')?-1:1:x.urgente?-1:1));
+  const cnt=k=>ls.filter(filt[k]).length;
+  return `<div class="row"><div><h1>Ordens de Serviço</h1><p class="sub">Fichas dos trabalhos: chegada, produção, provas, prazos e entrega.</p></div><span class="sp"></span><button class="btn p" onclick="formOS()">+ Nova ficha</button></div>
+  <div class="grid k4"><div class="card kpi"><div class="l">Em aberto</div><div class="v">${ab.length}</div></div><div class="card kpi"><div class="l">Atrasadas</div><div class="v" style="color:var(--bad)">${cnt('atrasadas')}</div></div><div class="card kpi"><div class="l">Vencem hoje</div><div class="v" style="color:var(--warn)">${cnt('hoje')}</div></div><div class="card kpi"><div class="l">Em prova</div><div class="v">${cnt('prova')}</div></div></div>
+  <div class="card tw" style="margin-top:16px"><div class="row" style="margin-bottom:12px;flex-wrap:wrap">${[['abertas','Em aberto'],['atrasadas','🔴 Atrasadas'],['hoje','Hoje'],['prova','Em prova'],['urgentes','⚡ Urgentes'],['prontas','Prontas'],['entregues','Entregues'],['todas','Todas']].map(([k,n])=>`<button class="btn sm ${F.f===k?'p':''}" onclick="S.osF.f='${k}';render()">${n} (${cnt(k)})</button>`).join('')}<span class="sp"></span><input id="bos" style="max-width:280px" placeholder="🔎 Ficha, paciente, dentista..." value="${esc(F.b)}" oninput="S.osF.b=this.value;S._refocus='bos';render()"></div>
+  <table><tr><th>Ficha</th><th>Clínica / Dentista</th><th>Paciente</th><th>Trabalho</th><th>Entrada</th><th>Prevista</th><th>Situação</th><th></th></tr>
+  ${l.slice(0,300).map(o=>{const st=OS_ST[o.status],atr=osAberta(o)&&o.prevista&&o.prevista<hj;return `<tr class="${atr?'baixo':''}"><td style="white-space:nowrap"><b>${esc(o.numero)}</b></td><td>${esc(nomeCli(o.cliente_id)||'—')}${o.dentista?`<div style="color:var(--muted);font-size:12px">${esc(o.dentista)}</div>`:''}</td><td>${esc(o.paciente||'—')}</td><td style="max-width:220px">${esc((o.trabalho||'').slice(0,60))}${o.cor?`<div style="color:var(--muted);font-size:12px">Cor ${esc(o.cor)}${o.escala?' · '+esc(o.escala):''}</div>`:''}</td><td>${dataBR(o.data_entrada)}</td><td style="${atr?'color:var(--bad);font-weight:700':''}">${dataBR(o.prevista)}</td><td><select style="width:auto;padding:4px 6px;font-size:12px" onchange="osStatus('${o.id}',this.value)">${Object.entries(OS_ST).filter(([k])=>k!=='entregue'||o.status==='entregue').map(([k,v])=>`<option value="${k}" ${o.status===k?'selected':''}>${v[0]}</option>`).join('')}</select>${o.urgente?' <span class="tag t-bad">Urgente</span>':''}${o.remoldagem?' <span class="tag t-warn">Remoldagem</span>':''}${o.suspenso?' <span class="tag">Suspenso</span>':''}</td>
+  <td class="num" style="white-space:nowrap"><button class="btn sm" onclick="formOS('${o.id}')">Abrir</button> <button class="btn sm" title="Imprimir ficha" onclick="imprimirOS('${o.id}')">🖨️</button> ${o.venda_id?`<button class="btn sm" title="Relatório do serviço" onclick="relFicha('${o.venda_id}')">📄</button>`:osAberta(o)?`<button class="btn sm p" title="Lançar a venda no PDV" onclick="finalizarOS('${o.id}')">✓ Finalizar</button>`:''}</td></tr>`}).join('')||'<tr><td colspan="8" class="empty">Nenhuma ficha aqui</td></tr>'}</table>${l.length>300?`<p style="color:var(--muted);margin-top:8px">Mostrando 300 de ${l.length}. Use a busca.</p>`:''}</div>`;
+};
+const dataBR=d=>d?d.split('-').reverse().join('/'):'—';
+async function osStatus(id,st){try{await q(sb.from('ordens_servico').update({status:st}).eq('id',id));toast('Situação: '+OS_ST[st][0]);render()}catch(e){erro(e)}}
+function formOS(id){
+  const o=id?(S._os||[]).find(x=>x.id===id):{data_entrada:today(),tipo:'Pedido',status:'recebido'};
+  const inp=(k,l,t='text',x='')=>`<div ${x}><label>${l}</label><input name="${k}" type="${t}" value="${esc(o[k]==null?'':o[k])}"></div>`;
+  const chk=(k,l)=>`<label style="display:flex;align-items:center;gap:6px;font-weight:600;cursor:pointer"><input type="checkbox" name="${k}" style="width:18px;height:18px" ${o[k]?'checked':''}> ${l}</label>`;
+  const sn=(k,l)=>`<div><label>${l}</label><select name="${k}"><option value="">—</option><option value="true" ${o[k]===true?'selected':''}>Sim</option><option value="false" ${o[k]===false?'selected':''}>Não</option></select></div>`;
+  modal(`<h3>🦷 ${id?'Ficha '+esc(o.numero):'Nova ficha'} ${id?`<span class="tag ${OS_ST[o.status][1]}">${OS_ST[o.status][0]}</span>`:''}</h3>
+  <form id="fos" class="f" style="grid-template-columns:repeat(4,1fr);max-height:68vh;overflow:auto;padding-right:4px">
+    ${inp('numero','Nº da ficha',undefined,'')}${inp('data_entrada','Data de entrada','date')}${inp('prevista','Prevista (entrega)','date')}${inp('data_lab','Data laboratório','date')}
+    <div style="grid-column:span 2"><label>Clínica / Consultório (cliente)</label><select name="cliente_id">${optsList(S.clientes,o.cliente_id||'','Escolha a clínica')}</select></div>${inp('dentista','Cirurgião-dentista',undefined,'style="grid-column:span 2"')}
+    ${inp('paciente','Paciente',undefined,'style="grid-column:span 2"')}<div><label>Sexo</label><select name="sexo"><option value="">—</option>${['Fem.','Mas.'].map(x=>`<option ${o.sexo===x?'selected':''}>${x}</option>`).join('')}</select></div><div><label>Tipo</label><select name="tipo">${['Pedido','Retorno','Remoldagem','Conserto'].map(x=>`<option ${o.tipo===x?'selected':''}>${x}</option>`).join('')}</select></div>
+    ${inp('cor','Cor do dente')}${inp('escala','Escala')}${inp('pastilhas','Pastilhas')}${inp('substrato','Substrato')}
+    <div style="grid-column:span 4"><label>Trabalho a ser executado</label><textarea name="trabalho" rows="2" style="width:100%">${esc(o.trabalho||'')}</textarea></div>
+    ${inp('moldeira_parcial','Moldeira parcial (qtd)','number')}${inp('moldeira_total','Moldeira total (qtd)','number')}${sn('antagonista','Antagonista')}${sn('registro','Registro')}
+    <div style="grid-column:span 4;font-weight:700;margin-top:4px">Componentes</div>
+    ${inp('ucla_cliente','UCLA do cliente')}${inp('analogo_cliente','Análogo do cliente')}${inp('parafuso_cliente','Parafuso do cliente')}${inp('secao','Seção')}
+    ${inp('ucla_lab','UCLA do laboratório')}${inp('analogo_lab','Análogo do laboratório')}${inp('parafuso_lab','Parafuso do laboratório')}<div></div>
+    <div style="grid-column:span 4;font-weight:700;margin-top:4px">Provas (idas e voltas)</div>
+    ${inp('rd1','Retorno p/ dentista 1','date')}${inp('rd2','Retorno p/ dentista 2','date')}${inp('rd3','Retorno p/ dentista 3','date')}<div></div>
+    ${inp('rl1','Retorno p/ laboratório 1','date')}${inp('rl2','Retorno p/ laboratório 2','date')}${inp('rl3','Retorno p/ laboratório 3','date')}<div></div>
+    <div style="grid-column:span 4"><label>Observações</label><textarea name="obs" rows="3" style="width:100%">${esc(o.obs||'')}</textarea></div>
+    <div style="grid-column:span 4;display:flex;gap:18px;flex-wrap:wrap">${chk('urgente','⚡ Urgente')}${chk('remoldagem','Remoldagem')}${chk('suspenso','Suspenso')}</div>
+  </form>
+  <div class="row" style="margin-top:12px">${id&&dono()?`<button class="btn d" onclick="fechar();confirmar('Excluir a ficha ${esc(o.numero)}?',()=>delOS('${id}'))">Excluir</button>`:''}${id?`<button class="btn" onclick="imprimirOS('${id}')">🖨️ Imprimir</button>`:''}<span class="sp"></span><button class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bos2" onclick="salvarOS('${id||''}')">Salvar</button></div>`);
+  $('#mbox').style.width='min(980px,100%)';if(!id)$('#fos [name=numero]').placeholder='Automático';
+}
+function salvarOS(id){
+  const fm=$('#fos'),d={};
+  [...fm.elements].forEach(e=>{if(!e.name)return;if(e.type==='checkbox')d[e.name]=e.checked;else if(e.tagName==='SELECT'&&(e.name==='antagonista'||e.name==='registro'))d[e.name]=e.value===''?null:e.value==='true';else if(e.type==='number')d[e.name]=e.value===''?null:+e.value;else d[e.name]=e.value.trim()||null});
+  busy($('#bos2'),async()=>{
+    if(id)await q(sb.from('ordens_servico').update(d).eq('id',id));
+    else{const r=await q(sb.from('ordens_servico').insert({...d,empresa_id:S.empresa.id}).select('numero'));toast('Ficha '+(r[0]&&r[0].numero||'')+' criada')}
+    fechar();render();
+  });
+}
+async function delOS(id){try{await q(sb.from('ordens_servico').delete().eq('id',id));toast('Ficha excluída');render()}catch(e){erro(e)}}
+function finalizarOS(id){
+  const o=(S._os||[]).find(x=>x.id===id);if(!o)return;
+  S.cart=[];S.pdvF={...S.pdvF,cli:o.cliente_id||'',pac:o.paciente||'',fic:o.numero||'',ent:o.data_entrada||'',os:o.id,pg:o.cliente_id?'Fiado':S.pdvF.pg};
+  go('pdv');toast('Escolha os serviços da ficha '+o.numero+' e finalize a venda');
+}
+async function imprimirOS(id){
+  const o=(S._os||[]).find(x=>x.id===id);if(!o)return;const emp=await empDados();const c=S.clientes.find(x=>x.id===o.cliente_id)||{};
+  const L=(l,v)=>`<tr><td style="width:30%"><b>${l}</b></td><td>${esc(v==null||v===''?'—':String(v))}</td></tr>`,sn=v=>v===true?'Sim':v===false?'Não':'—';
+  const doc=`<div class="rsdoc"><div class="rs-h"><div><div class="rs-emp">${esc(emp.nome)}</div><div class="rs-sub">${[emp.endereco,emp.telefone||emp.whatsapp].filter(Boolean).map(esc).join(' · ')}</div></div><div class="rs-tit">Ordem de Serviço<div class="rs-sub" style="font-size:16px;color:#1d2433;font-weight:800">Nº ${esc(o.numero)}</div></div></div>
+  ${o.urgente?'<div style="background:#fdecec;color:#c0392b;font-weight:800;padding:6px 8px;margin-bottom:8px">⚡ URGENTE</div>':''}
+  <table class="rs-t"><tbody>${L('Data de entrada',dataBR(o.data_entrada))}${L('Prevista',dataBR(o.prevista))}${L('Clínica / Consultório',c.nome)}${L('Cirurgião-dentista',o.dentista)}${L('Paciente',(o.paciente||'—')+(o.sexo?' ('+o.sexo+')':''))}${L('Cor do dente / Escala',[o.cor,o.escala].filter(Boolean).join(' · '))}${L('Trabalho a ser executado',o.trabalho)}${L('Moldeira parcial / total',(o.moldeira_parcial??'—')+' / '+(o.moldeira_total??'—'))}${L('Antagonista / Registro',sn(o.antagonista)+' / '+sn(o.registro))}${L('Cliente: UCLA · Análogo · Parafuso',[o.ucla_cliente,o.analogo_cliente,o.parafuso_cliente].map(x=>x||'—').join(' · '))}${L('Laborat.: UCLA · Análogo · Parafuso',[o.ucla_lab,o.analogo_lab,o.parafuso_lab].map(x=>x||'—').join(' · '))}${L('Retorno p/ o dentista',[o.rd1,o.rd2,o.rd3].map(dataBR).join('   '))}${L('Retorno p/ o laboratório',[o.rl1,o.rl2,o.rl3].map(dataBR).join('   '))}${L('Pastilhas / Substrato',[o.pastilhas,o.substrato].filter(Boolean).join(' · '))}</tbody></table>
+  <div style="border:1px solid #1d2433;min-height:90px;padding:6px 8px;margin-top:10px"><b>Observações:</b><br>${esc(o.obs||'')}</div>
+  <div class="rs-rod">Impresso em ${new Date().toLocaleDateString('pt-BR')} · ${esc(emp.nome)}</div></div>`;
+  imprimirDoc(doc,'Ficha '+o.numero);
 }
 function cupomHist(id){const v=(S._hist||[]).find(x=>x.id===id);if(v&&!S.vendas.find(x=>x.id===id))S.vendas.push(v);cupom(id)}
 
