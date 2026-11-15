@@ -293,7 +293,7 @@ function telaBloqueio(){
 async function sair(){await sb.auth.signOut();S.user=S.empresa=null;S.cart=[];S.view='painel';telaLogin()}
 
 // ============ APP ============
-const MENU=[['painel','📊','Painel'],['pdv','🛒','Vender (PDV)'],['os','🦷','Ordens de Serviço'],['produtos','📦','Produtos',1],['precificacao','🧮','Precificação',1],['entrada','⬇️','Entradas',1],['saida','⬆️','Saídas',1],['estoque','🗂️','Estoque'],['etiquetas','🏷️','Etiquetas'],['clientes','👤','Clientes'],['fornecedores','🚚','Fornecedores',1],['financeiro','🏦','Financeiro',1],['historico','🧾','Histórico'],['servexec','📑','Serviços executados',1],['equipe','👥','Equipe',1],['conta','💳','Minha conta']];
+const MENU=[['painel','📊','Painel'],['pdv','🛒','Vender (PDV)'],['os','🦷','Ordens de Serviço'],['produtos','📦','Produtos',1],['precificacao','🧮','Precificação',1],['entrada','⬇️','Entradas',1],['saida','⬆️','Saídas',1],['estoque','🗂️','Estoque'],['etiquetas','🏷️','Etiquetas'],['clientes','👤','Clientes'],['fornecedores','🚚','Fornecedores',1],['financeiro','🏦','Financeiro',1],['historico','🧾','Histórico'],['servexec','📑','Serviços executados',1],['equipe','👥','Equipe',1],['manual','📘','Manual'],['conta','💳','Minha conta']];
 function montarApp(){
   const itens=S.empresa&&ativa(S.empresa)?MENU.filter(m=>(!m[3]||dono())&&(m[0]!=='os'||S.empresa.os_ativo)).map(m=>m[0]==='financeiro'&&!MULTI()?['financeiro','💵','Caixa',1]:m):[];
   if(S.admin)itens.push(['admin','🛡️','Admin (clientes)']);
@@ -907,6 +907,17 @@ async function imprimirOS(id){
   imprimirDoc(doc,'Ficha '+o.numero);
 }
 async function defFinVer(uid,v){try{await rpc('definir_fin_ver',{p_empresa:S.empresa.id,p_user:uid,p_valor:v});toast(v?'Financeiro somente para visualizar':'Financeiro liberado');render()}catch(e){erro(e);render()}}
+// ---- Manual do sistema (sempre atualizado: arquivos manual/*.html e *.pdf no próprio site)
+const manualId=()=>S.empresa&&(S.empresa.os_ativo||/laborat/i.test(S.empresa.nome||''))?'lab':'nexus';
+VIEWS.manual=async()=>{
+  const k=manualId(),v=Date.now(),url=`manual/${k}.html?v=${v}`,pdf=`manual/${k}.pdf?v=${v}`;
+  return `<div class="row"><div><h1>📘 Manual do Gestor PRO</h1><p class="sub">Guia completo de ${esc(S.empresa.nome)}, sempre atualizado. Leia aqui, baixe em PDF ou imprima.</p></div><span class="sp"></span>
+  <a class="btn" style="text-decoration:none" href="${pdf}" download="Manual-Gestor-PRO-${k==='lab'?'Laboratorio':'Nexus'}.pdf">⬇️ Baixar PDF</a>
+  <button class="btn" onclick="try{$('#manfr').contentWindow.print()}catch(e){window.open('${url}','_blank')}">🖨️ Imprimir</button>
+  <a class="btn p" style="text-decoration:none" target="_blank" href="${url}">↗️ Tela cheia</a></div>
+  <div class="card" style="padding:0;overflow:hidden;margin-top:6px"><iframe id="manfr" src="${url}" title="Manual" style="width:100%;height:calc(100vh - 210px);min-height:520px;border:0;background:#fff;display:block"></iframe></div>
+  <p style="color:var(--muted);font-size:12.5px;margin-top:8px">Dúvidas que não estão no manual? Suporte AAS Tecnologia Editorial: WhatsApp (19) 98952-2187.</p>`;
+};
 function cupomHist(id){const v=(S._hist||[]).find(x=>x.id===id);if(v&&!S.vendas.find(x=>x.id===id))S.vendas.push(v);cupom(id)}
 
 // ---- Precificação
