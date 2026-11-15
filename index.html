@@ -143,6 +143,9 @@ input:focus,select:focus{border-color:var(--brand)}
 .pixhint{font-size:12px;opacity:.9;margin:10px 0}
 .pixbtn{width:100%;background:#fff!important;color:#4c1d95!important;border:0!important;font-weight:700;margin-top:4px}
 .pixbtn2{width:100%;background:transparent!important;color:#fff!important;border:1px solid rgba(255,255,255,.6)!important;margin-top:8px}
+.pixpaid{width:100%;margin-top:12px;background:#22c55e!important;color:#fff!important;border:0!important;font-weight:700;font-size:16px;padding:14px;box-shadow:0 6px 18px rgba(34,197,94,.45)}
+.pixok{background:rgba(255,255,255,.18);border-radius:12px;padding:12px;margin-top:12px;font-size:13px;text-align:left}
+.optpg{flex:1;display:flex;gap:8px;align-items:flex-start;border:2px solid var(--line);border-radius:12px;padding:12px;cursor:pointer}.optpg:has(input:checked){border-color:var(--p,#4f46e5);background:rgba(79,70,229,.07)}.optpg input,#fjp input[type=checkbox]{width:auto!important;flex:none;margin-top:3px}.optpg span{display:flex;flex-direction:column}.optpg small{color:var(--muted)}
 .btn.ok{background:var(--ok);color:#fff;border-color:var(--ok)}
 </style>
 </head>
@@ -196,6 +199,7 @@ async function carregarSessao(){
       q(sb.from('admins').select('user_id').eq('user_id',S.user.id))
     ]);
     S.admin=adm.length>0;
+    if(S.admin){try{S.avisosN=(await rpc('admin_avisos')).length;if(S.avisosN)setTimeout(()=>toast('🔔 '+S.avisosN+' aviso(s) de pagamento — veja no Admin'),900)}catch(e){S.avisosN=0}}
     S.empresas=mem.filter(m=>m.empresas).map(m=>({...m.empresas,papel:m.papel})).sort((a,b)=>a.nome.localeCompare(b.nome));
     let pref=null;try{pref=localStorage.getItem('gp_emp')}catch(e){}
     const esc_=S.empresas.find(x=>x.id===pref)||S.empresas.find(ativa)||S.empresas[0];
@@ -305,7 +309,27 @@ async function pixMontar(){const el=document.getElementById('pixcard');if(!el)re
    ${qr?`<div class="pixqr">${qr}</div><p class="pixhint">Abra o app do seu banco → Pix → <b>Ler QR Code</b></p>`:''}
    <button class="btn p pixbtn" onclick="pixCopiar('code',this)">📋 Copiar Pix Copia e Cola</button>
    <button class="btn pixbtn2" onclick="pixCopiar('chave',this)">🔑 Copiar chave Pix</button>
-   <p class="pixhint">Depois de pagar, envie o comprovante pelo WhatsApp. Sua assinatura é liberada em seguida. 💜</p>`}
+   <div id="pixav"></div>`;pixStatus()}
+async function pixStatus(){const el=document.getElementById('pixav');if(!el||!S.empresa)return;let a=null;try{a=await rpc('meu_aviso_pendente',{p_empresa:S.empresa.id})}catch(e){}
+  el.innerHTML=a?`<div class="pixok">⏳ Pagamento <b>${a.tipo==='anual'?'anual':'mensal'}</b> avisado em ${new Date(a.criado_em).toLocaleDateString('pt-BR')}. Aguardando confirmação da AAS — você será liberado em seguida.</div><button class="btn pixbtn2" onclick="formJaPaguei()">Avisar de novo / corrigir</button>`
+   :`<button class="btn pixpaid" onclick="formJaPaguei()">✅ Já paguei — avisar a AAS</button><p class="pixhint">Depois de pagar, toque aqui para liberar sua assinatura. 💜</p>`}
+function formJaPaguei(){const emps=(S.empresas||[]).length?S.empresas:[S.empresa];
+  modal(`<h3>✅ Avisar pagamento</h3><p class="sub" style="margin:4px 0 12px">Escolha o que você pagou. A AAS confere o Pix e libera na hora.</p>
+  <form id="fjp" class="f" style="grid-template-columns:1fr">
+   <div class="row" style="gap:10px">
+    <label class="optpg"><input type="radio" name="tipo" value="mensal" checked><span><b>📅 Mensal</b><small>libera 30 dias</small></span></label>
+    <label class="optpg"><input type="radio" name="tipo" value="anual"><span><b>🗓️ Anual</b><small>libera 1 ano</small></span></label></div>
+   <div><label>Valor pago (R$)</label><input name="valor" type="number" step="0.01" min="0" inputmode="decimal" placeholder="Ex.: 139,00"></div>
+   ${emps.length>1?`<div><label>Empresas que este pagamento cobre</label>${emps.map(x=>`<label style="display:flex;gap:8px;align-items:center;margin:6px 0;font-weight:500"><input type="checkbox" name="e" value="${x.id}" checked> ${esc(x.nome)}</label>`).join('')}</div>`:`<input type="hidden" name="e" value="${emps[0].id}">`}
+   <div><label>Observação (opcional)</label><input name="obs" placeholder="Ex.: pago pelo Itaú às 10h"></div>
+   <div class="row"><span class="sp"></span><button type="button" class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bjp">Enviar aviso</button></div></form>`);
+  $('#fjp').onsubmit=ev=>{ev.preventDefault();const f=ev.target;const tipo=f.querySelector('input[name=tipo]:checked').value;
+    const ids=[...f.querySelectorAll('input[name=e]')].filter(i=>i.type==='hidden'||i.checked).map(i=>i.value);if(!ids.length)return toast('Marque ao menos uma empresa');
+    const valor=f.valor.value?Number(f.valor.value):null;
+    busy($('#bjp'),async()=>{await rpc('avisar_pagamento',{p_empresas:ids,p_tipo:tipo,p_valor:valor,p_obs:f.obs.value||null});fechar();
+      const nomes=emps.filter(x=>ids.includes(x.id)).map(x=>x.nome).join(' + ');
+      toast('Aviso enviado! Agora mande o comprovante no WhatsApp 💬');pixStatus();
+      setTimeout(()=>window.open(zap(`✅ Paguei o Pix do ${CONFIG.NOME_SISTEMA} — plano ${tipo==='anual'?'ANUAL':'MENSAL'}${valor?' (R$ '+valor.toFixed(2).replace('.',',')+')':''}.\nEmpresa(s): ${nomes}\nSegue o comprovante:`),'_blank'),600)})}}
 async function pixCopiar(t,b){const x=await pixInfo();if(!x)return;const v=t==='code'?S._pixCode:x.chave;
   try{await navigator.clipboard.writeText(v)}catch(e){const a=document.createElement('textarea');a.value=v;document.body.appendChild(a);a.select();document.execCommand('copy');a.remove()}
   const o=b.innerHTML;b.innerHTML='✅ Copiado!';setTimeout(()=>b.innerHTML=o,1800);toast(t==='code'?'Pix Copia e Cola copiado — cole no app do banco':'Chave Pix copiada')}
@@ -326,7 +350,7 @@ async function sair(){await sb.auth.signOut();S.user=S.empresa=null;S.cart=[];S.
 const MENU=[['painel','📊','Painel'],['pdv','🛒','Vender (PDV)'],['os','🦷','Ordens de Serviço'],['produtos','📦','Produtos',1],['precificacao','🧮','Precificação',1],['entrada','⬇️','Entradas',1],['saida','⬆️','Saídas',1],['estoque','🗂️','Estoque'],['etiquetas','🏷️','Etiquetas'],['clientes','👤','Clientes'],['fornecedores','🚚','Fornecedores',1],['financeiro','🏦','Financeiro',1],['historico','🧾','Histórico'],['servexec','📑','Serviços executados',1],['equipe','👥','Equipe',1],['manual','📘','Manual'],['conta','💳','Minha conta']];
 function montarApp(){
   const itens=S.empresa&&ativa(S.empresa)?MENU.filter(m=>(!m[3]||dono())&&(m[0]!=='os'||S.empresa.os_ativo)).map(m=>m[0]==='financeiro'&&!MULTI()?['financeiro','💵','Caixa',1]:m):[];
-  if(S.admin)itens.push(['admin','🛡️','Admin (clientes)']);
+  if(S.admin)itens.push(['admin','🛡️','Admin (clientes)'+(S.avisosN?' 🔔'+S.avisosN:'')]);
   $('#root').innerHTML=`<div class="app"><aside>${logo(S.empresa?S.empresa.nome:'Administrador')}${seletorEmpresa()}<nav id="nav">${itens.map(m=>`<button data-v="${m[0]}"><span class="ic">${m[1]}</span>${m[2]}</button>`).join('')}</nav>
   <div class="user">${esc(S.user.email)}<br>${S.papel?`<span class="tag t-blue" style="margin:6px 0">${S.papel==='dono'?'Dono':'Vendedor'}</span><br>`:''}<a href="#" onclick="sair();return false">Sair</a></div></aside><main id="main"></main></div>`;
   $('#nav').addEventListener('click',e=>{const b=e.target.closest('button');if(b)go(b.dataset.v)});
@@ -1325,7 +1349,12 @@ function trocarSenha(form){busy(form.querySelector('button'),async()=>{const {er
 VIEWS.admin=async()=>{
   const l=await rpc('admin_listar');S._adm=l;
   const ativos=l.filter(e=>e.status==='ativo'&&e.vencimento>=today()).length,testes=l.filter(e=>e.status==='teste'&&e.vencimento>=today()).length,venc=l.filter(e=>e.vencimento<today()||e.status==='bloqueado').length;
-  return `<h1>Admin — seus clientes</h1><p class="sub">Libere, renove ou bloqueie cada empresa. Recebeu o Pix? Clique em <b>💰 Pago (+1 ano)</b> — todas as empresas do mesmo dono são renovadas juntas.</p>
+  let av=[];try{av=await rpc('admin_avisos')}catch(e){}S._av=av;S.avisosN=av.length;
+  const avH=av.length?`<div class="card" style="border:2px solid var(--warn);margin-bottom:16px"><h3>🔔 Avisos de pagamento (${av.length})</h3>
+   ${av.map(a=>`<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px 0;border-top:1px solid var(--line)"><div style="flex:1;min-width:220px"><b>${esc(a.nomes||'')}</b><br><span class="tag ${a.tipo==='anual'?'t-blue':'t-ok'}">${a.tipo==='anual'?'🗓️ Anual → +1 ano':'📅 Mensal → +30 dias'}</span> ${a.valor!=null?'<b>'+R(a.valor)+'</b>':''}<div style="color:var(--muted);font-size:12px;margin-top:4px">${esc(a.email||'')} · ${new Date(a.criado_em).toLocaleString('pt-BR')}${a.obs?' · '+esc(a.obs):''}</div></div>
+   <div class="row" style="gap:8px"><button class="btn sm ok" onclick="resolverAviso('${a.id}',true)">✅ Confirmar</button><button class="btn sm d" onclick="resolverAviso('${a.id}',false)">Recusar</button></div></div>`).join('')}
+   <p style="color:var(--muted);font-size:12px;margin-top:8px">Confira se o Pix caiu na sua conta antes de confirmar. Ao confirmar, o sistema renova sozinho (+30 dias ou +1 ano) todas as empresas do aviso.</p></div>`:'';
+  return avH+`<h1>Admin — seus clientes</h1><p class="sub">Libere, renove ou bloqueie cada empresa. Recebeu o Pix? Clique em <b>💰 Pago (+1 ano)</b> — todas as empresas do mesmo dono são renovadas juntas.</p>
   <div class="grid k4"><div class="card kpi"><div class="l">Clientes ativos</div><div class="v" style="color:var(--ok)">${ativos}</div></div><div class="card kpi"><div class="l">Em teste</div><div class="v" style="color:var(--warn)">${testes}</div></div><div class="card kpi"><div class="l">Vencidos/bloqueados</div><div class="v" style="color:var(--bad)">${venc}</div></div><div class="card kpi"><div class="l">Total</div><div class="v">${l.length}</div></div></div>
   <div class="card tw" style="margin-top:16px"><table><tr><th>Empresa</th><th>Dono</th><th>Plano</th><th>Situação</th><th>Vence</th><th class="num">Vendas 30d</th><th></th></tr>
   ${l.map(e=>{const venceu=e.vencimento<today();const st=e.status==='bloqueado'?['Bloqueado','t-bad']:venceu?['Vencido','t-bad']:e.status==='teste'?['Teste','t-warn']:['Ativo','t-ok'];return `<tr><td><b>${esc(e.nome)}</b><div style="color:var(--muted);font-size:12px">${esc(e.whatsapp||'')} · ${e.usuarios} usuário(s) · ${e.produtos} produtos</div></td><td>${esc(e.dono_email||'—')}</td><td>${esc(e.plano)}</td><td><span class="tag ${st[1]}">${st[0]}</span></td><td>${DD(e.vencimento)}</td><td class="num">${e.vendas_30d}</td><td class="num" style="white-space:nowrap"><button class="btn sm ok" onclick="pagoAno('${e.id}')">💰 Pago (+1 ano)</button> <button class="btn sm p" onclick="renovar('${e.id}')">+30 dias</button> <button class="btn sm" onclick="editEmp('${e.id}')">Editar</button></td></tr>`}).join('')||'<tr><td colspan="7" class="empty">Nenhum cliente ainda</td></tr>'}</table></div>`;
@@ -1333,6 +1362,10 @@ VIEWS.admin=async()=>{
 const admUpd=async(e,ch)=>{const n={status:ch.status??e.status,vencimento:ch.vencimento??e.vencimento,plano:ch.plano??e.plano};await rpc('admin_atualizar',{p_empresa:e.id,p_status:n.status,p_vencimento:n.vencimento,p_plano:n.plano});
   (S.empresas||[]).forEach(x=>{if(x.id===e.id)Object.assign(x,n)});if(S.empresa&&S.empresa.id===e.id)Object.assign(S.empresa,n);};
 async function renovar(id){const e=S._adm.find(x=>x.id===id);const base=e.vencimento>=today()?e.vencimento:today();try{await admUpd(e,{status:'ativo',vencimento:addDays(base,30)});toast(e.nome+' renovado até '+DD(addDays(base,30)));render()}catch(er){erro(er)}}
+async function resolverAviso(id,ok){const a=(S._av||[]).find(x=>x.id===id);if(!ok&&!confirm('Recusar este aviso? A assinatura não será renovada.'))return;
+  try{await rpc('admin_resolver_aviso',{p_id:id,p_ok:ok});toast(ok?(a.nomes+' renovada(s) '+(a.tipo==='anual'?'por 1 ano':'por 30 dias')+' ✅'):'Aviso recusado');
+    if(ok&&a){const mem=await q(sb.from('membros').select('papel,empresa_id,empresas(*)').eq('user_id',S.user.id));S.empresas=mem.filter(m=>m.empresas).map(m=>({...m.empresas,papel:m.papel})).sort((x,y)=>x.nome.localeCompare(y.nome));const cur=S.empresas.find(x=>S.empresa&&x.id===S.empresa.id);if(cur)Object.assign(S.empresa,cur)}
+    render()}catch(e){erro(e)}}
 const addAno=iso=>{const d=new Date(iso+'T12:00');d.setFullYear(d.getFullYear()+1);return d.toISOString().slice(0,10)};
 function pagoAno(id){const e=S._adm.find(x=>x.id===id);const base=x=>(x.status==='ativo'&&x.vencimento>=today())?x.vencimento:today();
   modal(`<h3>💰 Pagamento recebido</h3><p class="sub" style="margin:4px 0 12px">Marque as empresas que esse pagamento cobre. Elas ficam <b>Ativas por 1 ano</b>.</p>
