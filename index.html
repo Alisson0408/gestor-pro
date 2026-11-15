@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.12.3/dist/JsBarcode.all.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script>
 /* =================== CONFIGURAÇÃO — PREENCHA AQUI =================== */
 const CONFIG = {
@@ -133,6 +134,16 @@ input:focus,select:focus{border-color:var(--brand)}
   .k4{grid-template-columns:repeat(2,1fr)}.k2,.pdv{grid-template-columns:1fr}.f{grid-template-columns:1fr 1fr}
   .tw{overflow-x:auto}
 }
+.pixcard{margin-top:10px;border-radius:18px;padding:18px;color:#fff;text-align:center;background:linear-gradient(135deg,#6d28d9 0%,#2563eb 55%,#0ea5a4 100%);box-shadow:0 10px 30px rgba(79,70,229,.35)}
+.pixload{opacity:.9;padding:20px 0}
+.pixtop{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.pixlogo{font-weight:800;letter-spacing:2px}
+.pixtag{background:rgba(255,255,255,.2);border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600}
+.pixfav{background:rgba(255,255,255,.14);border-radius:12px;padding:10px;margin-bottom:12px}.pixfav small{display:block;opacity:.8;font-size:11px;text-transform:uppercase;letter-spacing:1px}.pixfav b{font-size:18px}
+.pixqr{background:#fff;border-radius:14px;padding:10px;width:190px;max-width:70%;margin:0 auto}.pixqr svg{width:100%;height:auto;display:block}
+.pixhint{font-size:12px;opacity:.9;margin:10px 0}
+.pixbtn{width:100%;background:#fff!important;color:#4c1d95!important;border:0!important;font-weight:700;margin-top:4px}
+.pixbtn2{width:100%;background:transparent!important;color:#fff!important;border:1px solid rgba(255,255,255,.6)!important;margin-top:8px}
+.btn.ok{background:var(--ok);color:#fff;border-color:var(--ok)}
 </style>
 </head>
 <body>
@@ -280,12 +291,31 @@ function telaOnboarding(){
   $('#fo').onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));busy($('#bo'),async()=>{await rpc('criar_empresa',{p_nome:f.nome,p_whatsapp:f.zap||null});toast('Empresa criada! Bom teste 🚀');await carregarSessao()})};
 }
 
+// ---- Pagamento por Pix (a chave vem do banco, não fica no código)
+const _pf=(id,v)=>id+String(v.length).padStart(2,'0')+v;
+function _crc16(t){let c=0xFFFF;for(let i=0;i<t.length;i++){c^=t.charCodeAt(i)<<8;for(let j=0;j<8;j++)c=(c&0x8000)?((c<<1)^0x1021)&0xFFFF:(c<<1)&0xFFFF}return c.toString(16).toUpperCase().padStart(4,'0')}
+function pixPayload(x,valor){let p=_pf('00','01')+_pf('26',_pf('00','br.gov.bcb.pix')+_pf('01',x.chave))+_pf('52','0000')+_pf('53','986')+(valor?_pf('54',Number(valor).toFixed(2)):'')+_pf('58','BR')+_pf('59',x.nome.slice(0,25))+_pf('60',x.cidade.slice(0,15))+_pf('62',_pf('05','***'))+'6304';return p+_crc16(p)}
+async function pixInfo(){if(!S.pix){try{S.pix=await rpc('pix_info')}catch(e){S.pix=null}}return S.pix}
+function pixCard(){setTimeout(pixMontar,0);return `<div id="pixcard" class="pixcard"><div class="pixload">Carregando Pix…</div></div>`}
+async function pixMontar(){const el=document.getElementById('pixcard');if(!el)return;const x=await pixInfo();
+  if(!x){el.innerHTML='<div class="pixload">Pix indisponível no momento. Fale conosco pelo WhatsApp.</div>';return}
+  const code=pixPayload(x);S._pixCode=code;let qr='';try{const q=qrcode(0,'M');q.addData(code);q.make();qr=q.createSvgTag({cellSize:4,margin:2,scalable:true})}catch(e){}
+  el.innerHTML=`<div class="pixtop"><span class="pixlogo">◆ PIX</span><span class="pixtag">Sem taxas</span></div>
+   <div class="pixfav"><small>Favorecido</small><b>${esc(x.exibir)}</b></div>
+   ${qr?`<div class="pixqr">${qr}</div><p class="pixhint">Abra o app do seu banco → Pix → <b>Ler QR Code</b></p>`:''}
+   <button class="btn p pixbtn" onclick="pixCopiar('code',this)">📋 Copiar Pix Copia e Cola</button>
+   <button class="btn pixbtn2" onclick="pixCopiar('chave',this)">🔑 Copiar chave Pix</button>
+   <p class="pixhint">Depois de pagar, envie o comprovante pelo WhatsApp. Sua assinatura é liberada em seguida. 💜</p>`}
+async function pixCopiar(t,b){const x=await pixInfo();if(!x)return;const v=t==='code'?S._pixCode:x.chave;
+  try{await navigator.clipboard.writeText(v)}catch(e){const a=document.createElement('textarea');a.value=v;document.body.appendChild(a);a.select();document.execCommand('copy');a.remove()}
+  const o=b.innerHTML;b.innerHTML='✅ Copiado!';setTimeout(()=>b.innerHTML=o,1800);toast(t==='code'?'Pix Copia e Cola copiado — cole no app do banco':'Chave Pix copiada')}
+
 function telaBloqueio(){
   const e=S.empresa;const motivo=e.status==='bloqueado'?'Seu acesso foi suspenso.':e.status==='teste'?'Seu período de teste terminou.':'Sua assinatura venceu em '+DD(e.vencimento)+'.';
   $('#root').innerHTML=`<div class="center"><div class="card authbox" style="text-align:center">${logo(e.nome)}
   <div style="font-size:42px;margin:6px 0">🔒</div><h3 style="justify-content:center">${motivo}</h3>
   <p style="color:var(--muted);margin:8px 0 18px">Seus dados estão guardados com segurança. Renove para voltar a usar na hora.</p>
-  <a class="btn p" style="display:block;text-decoration:none" href="${zap('Olá! Quero renovar o '+CONFIG.NOME_SISTEMA+' da empresa '+e.nome)}" target="_blank" rel="noopener">💬 Renovar pelo WhatsApp</a>
+  ${pixCard()}<a class="btn" style="display:block;text-decoration:none;margin-top:12px" href="${zap('Olá! Paguei o Pix do '+CONFIG.NOME_SISTEMA+' da empresa '+e.nome+'. Segue o comprovante:')}" target="_blank" rel="noopener">💬 Enviar comprovante pelo WhatsApp</a>
   <p style="color:var(--muted);font-size:12px;margin-top:8px">WhatsApp: +${esc(CONFIG.WHATSAPP_SUPORTE)}</p>
   <div class="row" style="margin-top:14px;justify-content:center"><button class="btn sm" onclick="carregarSessao()">Já renovei — atualizar</button><button class="btn sm" onclick="sair()">Sair</button></div>
   ${(S.empresas||[]).filter(x=>x.id!==e.id).length?`<p style="color:var(--muted);font-size:12px;margin:16px 0 8px">Suas outras empresas:</p><div class="row" style="justify-content:center">${S.empresas.filter(x=>x.id!==e.id).map(x=>`<button class="btn sm" onclick="trocarEmpresa('${x.id}')">🏢 ${esc(x.nome)}</button>`).join('')}</div>`:''}</div></div>`;
@@ -1282,7 +1312,8 @@ VIEWS.conta=()=>{
   return `<h1>Minha conta</h1><p class="sub">Dados da assinatura e do seu acesso.</p>
   <div class="grid k2"><div class="card"><h3>Assinatura</h3>
     <table><tr><td>Empresa</td><td class="num"><b>${esc(e.nome)}</b></td></tr><tr><td>Plano</td><td class="num">${esc(e.plano)}</td></tr><tr><td>Situação</td><td class="num"><span class="tag ${st[1]}">${st[0]}</span></td></tr><tr><td>Válida até</td><td class="num"><b>${DD(e.vencimento)}</b></td></tr></table>
-    <a class="btn p" style="display:block;text-align:center;text-decoration:none;margin-top:14px" href="${zap('Olá! Quero '+(e.status==='teste'?'assinar':'renovar')+' o '+CONFIG.NOME_SISTEMA+' da empresa '+e.nome)}" target="_blank" rel="noopener">💬 ${e.status==='teste'?'Assinar':'Renovar'} pelo WhatsApp</a>
+    <h3 style="margin-top:18px">💠 ${e.status==='teste'?'Assinar':'Renovar'} com Pix</h3>${pixCard()}
+    <a class="btn" style="display:block;text-align:center;text-decoration:none;margin-top:12px" href="${zap('Olá! Paguei o Pix do '+CONFIG.NOME_SISTEMA+' da empresa '+e.nome+'. Segue o comprovante:')}" target="_blank" rel="noopener">💬 Enviar comprovante pelo WhatsApp</a>
     <p style="color:var(--muted);font-size:12px;margin-top:8px;text-align:center">Suporte: +${esc(CONFIG.WHATSAPP_SUPORTE)}</p></div>
   <div class="card"><h3>Meu acesso</h3><p style="margin-bottom:14px">${esc(S.user.email)}<br><span style="color:var(--muted)">${S.papel==='dono'?'Dono':'Vendedor'}</span></p>
     <form class="f" style="grid-template-columns:1fr" onsubmit="event.preventDefault();trocarSenha(this)"><div><label>Nova senha</label><input name="s" type="password" minlength="6" required autocomplete="new-password"></div><button class="btn">Trocar senha</button></form>
@@ -1294,14 +1325,21 @@ function trocarSenha(form){busy(form.querySelector('button'),async()=>{const {er
 VIEWS.admin=async()=>{
   const l=await rpc('admin_listar');S._adm=l;
   const ativos=l.filter(e=>e.status==='ativo'&&e.vencimento>=today()).length,testes=l.filter(e=>e.status==='teste'&&e.vencimento>=today()).length,venc=l.filter(e=>e.vencimento<today()||e.status==='bloqueado').length;
-  return `<h1>Admin — seus clientes</h1><p class="sub">Libere, renove ou bloqueie cada empresa. Ao receber o pagamento, clique em <b>+30 dias</b>.</p>
+  return `<h1>Admin — seus clientes</h1><p class="sub">Libere, renove ou bloqueie cada empresa. Recebeu o Pix? Clique em <b>💰 Pago (+1 ano)</b> — todas as empresas do mesmo dono são renovadas juntas.</p>
   <div class="grid k4"><div class="card kpi"><div class="l">Clientes ativos</div><div class="v" style="color:var(--ok)">${ativos}</div></div><div class="card kpi"><div class="l">Em teste</div><div class="v" style="color:var(--warn)">${testes}</div></div><div class="card kpi"><div class="l">Vencidos/bloqueados</div><div class="v" style="color:var(--bad)">${venc}</div></div><div class="card kpi"><div class="l">Total</div><div class="v">${l.length}</div></div></div>
   <div class="card tw" style="margin-top:16px"><table><tr><th>Empresa</th><th>Dono</th><th>Plano</th><th>Situação</th><th>Vence</th><th class="num">Vendas 30d</th><th></th></tr>
-  ${l.map(e=>{const venceu=e.vencimento<today();const st=e.status==='bloqueado'?['Bloqueado','t-bad']:venceu?['Vencido','t-bad']:e.status==='teste'?['Teste','t-warn']:['Ativo','t-ok'];return `<tr><td><b>${esc(e.nome)}</b><div style="color:var(--muted);font-size:12px">${esc(e.whatsapp||'')} · ${e.usuarios} usuário(s) · ${e.produtos} produtos</div></td><td>${esc(e.dono_email||'—')}</td><td>${esc(e.plano)}</td><td><span class="tag ${st[1]}">${st[0]}</span></td><td>${DD(e.vencimento)}</td><td class="num">${e.vendas_30d}</td><td class="num" style="white-space:nowrap"><button class="btn sm p" onclick="renovar('${e.id}')">+30 dias</button> <button class="btn sm" onclick="editEmp('${e.id}')">Editar</button></td></tr>`}).join('')||'<tr><td colspan="7" class="empty">Nenhum cliente ainda</td></tr>'}</table></div>`;
+  ${l.map(e=>{const venceu=e.vencimento<today();const st=e.status==='bloqueado'?['Bloqueado','t-bad']:venceu?['Vencido','t-bad']:e.status==='teste'?['Teste','t-warn']:['Ativo','t-ok'];return `<tr><td><b>${esc(e.nome)}</b><div style="color:var(--muted);font-size:12px">${esc(e.whatsapp||'')} · ${e.usuarios} usuário(s) · ${e.produtos} produtos</div></td><td>${esc(e.dono_email||'—')}</td><td>${esc(e.plano)}</td><td><span class="tag ${st[1]}">${st[0]}</span></td><td>${DD(e.vencimento)}</td><td class="num">${e.vendas_30d}</td><td class="num" style="white-space:nowrap"><button class="btn sm ok" onclick="pagoAno('${e.id}')">💰 Pago (+1 ano)</button> <button class="btn sm p" onclick="renovar('${e.id}')">+30 dias</button> <button class="btn sm" onclick="editEmp('${e.id}')">Editar</button></td></tr>`}).join('')||'<tr><td colspan="7" class="empty">Nenhum cliente ainda</td></tr>'}</table></div>`;
 };
 const admUpd=async(e,ch)=>{const n={status:ch.status??e.status,vencimento:ch.vencimento??e.vencimento,plano:ch.plano??e.plano};await rpc('admin_atualizar',{p_empresa:e.id,p_status:n.status,p_vencimento:n.vencimento,p_plano:n.plano});
   (S.empresas||[]).forEach(x=>{if(x.id===e.id)Object.assign(x,n)});if(S.empresa&&S.empresa.id===e.id)Object.assign(S.empresa,n);};
 async function renovar(id){const e=S._adm.find(x=>x.id===id);const base=e.vencimento>=today()?e.vencimento:today();try{await admUpd(e,{status:'ativo',vencimento:addDays(base,30)});toast(e.nome+' renovado até '+DD(addDays(base,30)));render()}catch(er){erro(er)}}
+const addAno=iso=>{const d=new Date(iso+'T12:00');d.setFullYear(d.getFullYear()+1);return d.toISOString().slice(0,10)};
+function pagoAno(id){const e=S._adm.find(x=>x.id===id);const base=x=>(x.status==='ativo'&&x.vencimento>=today())?x.vencimento:today();
+  modal(`<h3>💰 Pagamento recebido</h3><p class="sub" style="margin:4px 0 12px">Marque as empresas que esse pagamento cobre. Elas ficam <b>Ativas por 1 ano</b>.</p>
+  <form id="fpa">${S._adm.map(x=>`<label style="display:flex;gap:10px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer"><input type="checkbox" name="e" value="${x.id}" ${(x.id===e.id||(e.dono_email&&x.dono_email===e.dono_email))?'checked':''}><span style="flex:1"><b>${esc(x.nome)}</b><br><small style="color:var(--muted)">Hoje: ${esc(x.status)} até ${DD(x.vencimento)} → nova validade <b>${DD(addAno(base(x)))}</b></small></span></label>`).join('')}
+  <div class="row"><span class="sp"></span><button type="button" class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bpa">Confirmar pagamento</button></div></form>`);
+  $('#fpa').onsubmit=ev=>{ev.preventDefault();const ids=[...ev.target.querySelectorAll('input[name=e]:checked')].map(i=>i.value);if(!ids.length)return toast('Marque ao menos uma empresa');
+    busy($('#bpa'),async()=>{for(const i of ids){const x=S._adm.find(y=>y.id===i);await admUpd(x,{status:'ativo',vencimento:addAno(base(x))})}fechar();toast(ids.length+' empresa(s) renovada(s) por 1 ano ✅');render()})}}
 function editEmp(id){const e=S._adm.find(x=>x.id===id);modal(`<h3>${esc(e.nome)}</h3><form id="fem" class="f" style="grid-template-columns:1fr 1fr">
   <div><label>Situação</label><select name="status">${['teste','ativo','bloqueado'].map(s=>`<option ${s===e.status?'selected':''}>${s}</option>`).join('')}</select></div>
   <div><label>Plano</label><select name="plano">${['basico','profissional','personalizado'].map(s=>`<option ${s===e.plano?'selected':''}>${s}</option>`).join('')}</select></div>
