@@ -1016,7 +1016,7 @@ async function imprimirOS(id){
    <div class="xt-obs">OBS:<br>${esc(o.obs||o.trabalho||'')}</div>
    <div class="xt-rod">${OS_RODAPE}</div>
   </div>`;
-  imprimirDoc(doc,'Extrato '+o.numero,'A5 landscape','8mm');
+  imprimirDoc(`<div style="zoom:1.36">${doc}</div>`,'Extrato '+o.numero,'A4 landscape','9mm');
 }
 async function defFinVer(uid,v){try{await rpc('definir_fin_ver',{p_empresa:S.empresa.id,p_user:uid,p_valor:v});toast(v?'Financeiro somente para visualizar':'Financeiro liberado');render()}catch(e){erro(e);render()}}
 // ---- Manual do sistema (sempre atualizado: arquivos manual/*.html e *.pdf no próprio site)
