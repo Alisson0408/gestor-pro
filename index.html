@@ -941,7 +941,7 @@ function formOS(id){
     <div style="grid-column:span 4;display:flex;gap:18px;flex-wrap:wrap">${chk('urgente','⚡ Urgente')}${chk('remoldagem','Remoldagem')}${chk('suspenso','Suspenso')}</div>
   </form>
   <div class="row" style="margin-top:12px">${id&&dono()?`<button class="btn d" onclick="fechar();confirmar('Excluir a ficha ${esc(o.numero)}?',()=>delOS('${id}'))">Excluir</button>`:''}${id?`<button class="btn" onclick="imprimirOS('${id}')">🖨️ Imprimir</button>`:''}<span class="sp"></span><button class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bos2" onclick="salvarOS('${id||''}')">Salvar</button></div>`);
-  $('#mbox').style.width='min(980px,100%)';if(!id)$('#fos [name=numero]').placeholder='Automático';
+  $('#mbox').style.width='min(980px,100%)';{const nf=$('#fos [name=numero]');nf.autocomplete='off';if(!id){nf.placeholder='Gerando número…';proxNumOS().then(n=>{if(n&&!nf.value){nf.value=n;nf.dataset.sug=n;nf.title='Número gerado automaticamente. Não precisa digitar.'}})}}
   S._osCompTrava=!!o.componentes_baixados;(o.componentes||[]).forEach(c=>osCompLinha(c));
 }
 const prodsEst=()=>S.produtos.filter(p=>!servico(p)&&p.ativo!==false);
@@ -952,6 +952,9 @@ function osCompLinha(c={}){
   $('#oscomp').appendChild(d);
   if(!prodsEst().length&&!c.produto_id)$('#oscomp').insertAdjacentHTML('beforeend','<p style="color:var(--warn);font-size:12.5px">Cadastre os componentes (UCLA, análogo, parafuso…) em Produtos, com categoria que não seja "Serviço", e lance a entrada no estoque.</p>');
 }
+async function proxNumOS(){try{const E=S.empresa.id;
+  const a=await q(sb.from('ordens_servico').select('seq').eq('empresa_id',E).not('seq','is',null).order('seq',{ascending:false}).limit(1));
+  return String(((a[0]&&+a[0].seq)||0)+1).padStart(6,'0')+'-1'}catch(e){return ''}}
 function salvarOS(id){
   const fm=$('#fos'),d={};
   if(!S._osCompTrava)d.componentes=[...document.querySelectorAll('#oscomp .oscl')].map(l=>({produto_id:l.querySelector('.ocp').value,qtd:+l.querySelector('.ocq').value||0,cobrar:l.querySelector('.occ').checked})).filter(c=>c.produto_id&&c.qtd>0);
