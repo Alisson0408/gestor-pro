@@ -909,7 +909,7 @@ VIEWS.os=async()=>{
   <div class="card tw" style="margin-top:16px"><div class="row" style="margin-bottom:12px;flex-wrap:wrap">${[['abertas','Em aberto'],['atrasadas','🔴 Atrasadas'],['hoje','Hoje'],['prova','Em prova'],['urgentes','⚡ Urgentes'],['prontas','Prontas'],['entregues','Entregues'],['todas','Todas']].map(([k,n])=>`<button class="btn sm ${F.f===k?'p':''}" onclick="S.osF.f='${k}';render()">${n} (${cnt(k)})</button>`).join('')}<span class="sp"></span><input id="bos" style="max-width:280px" placeholder="🔎 Ficha, paciente, dentista..." value="${esc(F.b)}" oninput="S.osF.b=this.value;S._refocus='bos';render()"></div>
   <table><tr><th>Ficha</th><th>Clínica / Dentista</th><th>Paciente</th><th>Trabalho</th><th>Entrada</th><th>Prevista</th><th>Situação</th><th></th></tr>
   ${l.slice(0,300).map(o=>{const st=OS_ST[o.status],atr=osAberta(o)&&o.prevista&&o.prevista<hj;return `<tr class="${atr?'baixo':''}"><td style="white-space:nowrap"><b>${esc(o.numero)}</b></td><td>${esc(nomeCli(o.cliente_id)||'—')}${o.dentista?`<div style="color:var(--muted);font-size:12px">${esc(o.dentista)}</div>`:''}</td><td>${esc(o.paciente||'—')}</td><td style="max-width:220px">${esc((o.trabalho||'').slice(0,60))}${o.cor?`<div style="color:var(--muted);font-size:12px">Cor ${esc(o.cor)}${o.escala?' · '+esc(o.escala):''}</div>`:''}</td><td>${dataBR(o.data_entrada)}</td><td style="${atr?'color:var(--bad);font-weight:700':''}">${dataBR(o.prevista)}</td><td><select style="width:auto;padding:4px 6px;font-size:12px" onchange="osStatus('${o.id}',this.value)">${Object.entries(OS_ST).filter(([k])=>k!=='entregue'||o.status==='entregue').map(([k,v])=>`<option value="${k}" ${o.status===k?'selected':''}>${v[0]}</option>`).join('')}</select>${o.urgente?' <span class="tag t-bad">Urgente</span>':''}${o.remoldagem?' <span class="tag t-warn">Remoldagem</span>':''}${o.suspenso?' <span class="tag">Suspenso</span>':''}</td>
-  <td class="num" style="white-space:nowrap"><button class="btn sm" onclick="formOS('${o.id}')">Abrir</button> <button class="btn sm" title="Imprimir ficha" onclick="imprimirOS('${o.id}')">🖨️</button> ${o.venda_id?`<button class="btn sm" title="Relatório do serviço" onclick="relFicha('${o.venda_id}')">📄</button>`:osAberta(o)?`<button class="btn sm p" title="Lançar a venda no PDV" onclick="finalizarOS('${o.id}')">✓ Finalizar</button>`:''}</td></tr>`}).join('')||'<tr><td colspan="8" class="empty">Nenhuma ficha aqui</td></tr>'}</table>${l.length>300?`<p style="color:var(--muted);margin-top:8px">Mostrando 300 de ${l.length}. Use a busca.</p>`:''}</div>`;
+  <td class="num" style="white-space:nowrap"><button class="btn sm" onclick="formOS('${o.id}')">Abrir</button> <button class="btn sm" title="Imprimir ficha" onclick="imprimirOS('${o.id}')">🖨️</button> ${o.venda_id?`<button class="btn sm" title="Relatório do serviço" onclick="relFicha('${o.venda_id}')">📄</button>${dono()?` <button class="btn sm" title="Reabrir ficha finalizada" onclick="reabrirOS('${o.id}')">↩ Reabrir</button>`:''}`:osAberta(o)?`<button class="btn sm p" title="Lançar a venda no PDV" onclick="finalizarOS('${o.id}')">✓ Finalizar</button>`:''}</td></tr>`}).join('')||'<tr><td colspan="8" class="empty">Nenhuma ficha aqui</td></tr>'}</table>${l.length>300?`<p style="color:var(--muted);margin-top:8px">Mostrando 300 de ${l.length}. Use a busca.</p>`:''}</div>`;
 };
 const dataBR=d=>d?d.split('-').reverse().join('/'):'—';
 async function osStatus(id,st){try{await q(sb.from('ordens_servico').update({status:st}).eq('id',id));toast('Situação: '+OS_ST[st][0]);render()}catch(e){erro(e)}}
@@ -946,7 +946,7 @@ function formOS(id){
     <div style="grid-column:span 4"><label>Observações</label><textarea name="obs" rows="3" style="width:100%">${esc(o.obs||'')}</textarea></div>
     <div style="grid-column:span 4;display:flex;gap:18px;flex-wrap:wrap">${chk('urgente','⚡ Urgente')}${chk('remoldagem','Remoldagem')}${chk('suspenso','Suspenso')}</div>
   </form>
-  <div class="row" style="margin-top:12px">${id&&dono()?`<button class="btn d" onclick="fechar();confirmar('Excluir a ficha ${esc(o.numero)}?',()=>delOS('${id}'))">Excluir</button>`:''}${id?`<button class="btn" onclick="salvarOS('${id}',true)">🖨️ Salvar e imprimir</button>`:''}<span class="sp"></span><button class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bos2" onclick="salvarOS('${id||''}')">Salvar</button></div>`);
+  <div class="row" style="margin-top:12px">${id&&dono()?`<button class="btn d" onclick="fechar();confirmar('Excluir a ficha ${esc(o.numero)}?',()=>delOS('${id}'))">Excluir</button>`:''}${id?`<button class="btn" onclick="salvarOS('${id}',true)">🖨️ Salvar e imprimir</button>`:''}${id&&o.venda_id&&dono()?`<button class="btn" onclick="fechar();reabrirOS('${id}')">↩ Reabrir ficha</button>`:''}<span class="sp"></span><button class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bos2" onclick="salvarOS('${id||''}')">Salvar</button></div>`);
   $('#mbox').style.width='min(980px,100%)';{const nf=$('#fos [name=numero]');nf.autocomplete='off';if(!id){nf.placeholder='Gerando número…';proxNumOS().then(n=>{if(n&&!nf.value){nf.value=n;nf.dataset.sug=n;nf.title='Número gerado automaticamente. Não precisa digitar.'}})}}
   S._osCompTrava=!!o.componentes_baixados;(o.componentes||[]).forEach(c=>osCompLinha(c));
   (o.servicos&&o.servicos.length?o.servicos:[{}]).forEach(x=>osServLinha(x));osServTot();
@@ -984,6 +984,18 @@ function salvarOS(id,imp){
     else{const r=await q(sb.from('ordens_servico').insert({...d,empresa_id:S.empresa.id}).select('numero'));toast('Ficha '+(r[0]&&r[0].numero||'')+' criada')}
     fechar();render();if(imp&&id)imprimirOS(id);
   });
+}
+function reabrirOS(id){
+  const o=(S._os||[]).find(x=>x.id===id);if(!o||!o.venda_id)return;
+  confirmar(`Reabrir a ficha ${esc(o.numero)}? A venda dela será cancelada (sai do financeiro) e a ficha volta para "Em produção" para você corrigir e finalizar de novo.`,async()=>{try{
+    const pg=await q(sb.from('lancamentos').select('id').eq('venda_id',o.venda_id).eq('pago',true));
+    if(pg.length)return toast('Essa ficha já tem pagamento recebido. Desfaça a baixa no financeiro antes de reabrir.',1);
+    let sv=o.servicos||[];
+    if(!sv.length){const v=(await q(sb.from('vendas').select('venda_itens(produto_id,nome,qtd,preco)').eq('id',o.venda_id)))[0];sv=((v&&v.venda_itens)||[]).filter(i=>{const p=P(i.produto_id);return !p||servico(p)}).map(i=>({produto_id:i.produto_id,nome:i.nome,qtd:+i.qtd,preco:+i.preco,pct:0}))}
+    await rpc('cancelar_venda',{p_venda:o.venda_id});
+    await q(sb.from('ordens_servico').update({status:'producao',venda_id:null,servicos:sv}).eq('id',id));
+    await recarregar();toast('Ficha '+o.numero+' reaberta. Corrija e clique em Finalizar.');render();
+  }catch(e){erro(e)}});
 }
 async function delOS(id){try{await q(sb.from('ordens_servico').delete().eq('id',id));toast('Ficha excluída');render()}catch(e){erro(e)}}
 function finalizarOS(id){
