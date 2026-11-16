@@ -925,6 +925,12 @@ function formOS(id){
     ${inp('paciente','Paciente',undefined,'style="grid-column:span 2"')}<div><label>Sexo</label><select name="sexo"><option value="">—</option>${['Fem.','Mas.'].map(x=>`<option ${o.sexo===x?'selected':''}>${x}</option>`).join('')}</select></div><div><label>Tipo</label><select name="tipo">${['Pedido','Retorno','Remoldagem','Conserto'].map(x=>`<option ${o.tipo===x?'selected':''}>${x}</option>`).join('')}</select></div>
     ${inp('cor','Cor do dente')}${inp('escala','Escala')}${inp('pastilhas','Pastilhas')}${inp('substrato','Substrato')}
     <div style="grid-column:span 3"><label>Trabalho a ser executado</label><textarea name="trabalho" rows="2" style="width:100%">${esc(o.trabalho||'')}</textarea></div>${inp('elementos','Elementos (dentes) · ex.: 47 ou 11, 21')}
+    <div style="grid-column:span 4;border:1px solid var(--line);border-radius:12px;padding:10px">
+      <div class="row"><b>Serviços e valores da ficha</b><span class="sp"></span><b id="ostot" style="font-size:16px">R$ 0,00</b></div>
+      <p style="color:var(--muted);font-size:12.5px;margin:4px 0 8px">Aparecem na ficha impressa (Unitário, %, Total e Total Pedido) e já entram na venda ao <b>Finalizar</b>.</p>
+      <div style="display:grid;grid-template-columns:1fr 70px 110px 70px 110px 34px;gap:6px;font-size:12px;color:var(--muted);font-weight:600;margin-bottom:4px"><span>Serviço</span><span>Qtd.</span><span>Unitário</span><span>%</span><span>Total</span><span></span></div>
+      <div id="osserv"></div><button type="button" class="btn sm" onclick="osServLinha()">+ Serviço</button>
+    </div>
     ${inp('moldeira_parcial','Moldeira parcial (qtd)','number')}${inp('moldeira_total','Moldeira total (qtd)','number')}${sn('antagonista','Antagonista')}${sn('registro','Registro')}
     <div style="grid-column:span 4;font-weight:700;margin-top:4px">Componentes</div>
     ${inp('ucla_cliente','UCLA do cliente')}${inp('analogo_cliente','Análogo do cliente')}${inp('parafuso_cliente','Parafuso do cliente')}${inp('secao','Seção')}
@@ -940,10 +946,23 @@ function formOS(id){
     <div style="grid-column:span 4"><label>Observações</label><textarea name="obs" rows="3" style="width:100%">${esc(o.obs||'')}</textarea></div>
     <div style="grid-column:span 4;display:flex;gap:18px;flex-wrap:wrap">${chk('urgente','⚡ Urgente')}${chk('remoldagem','Remoldagem')}${chk('suspenso','Suspenso')}</div>
   </form>
-  <div class="row" style="margin-top:12px">${id&&dono()?`<button class="btn d" onclick="fechar();confirmar('Excluir a ficha ${esc(o.numero)}?',()=>delOS('${id}'))">Excluir</button>`:''}${id?`<button class="btn" onclick="imprimirOS('${id}')">🖨️ Imprimir</button>`:''}<span class="sp"></span><button class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bos2" onclick="salvarOS('${id||''}')">Salvar</button></div>`);
+  <div class="row" style="margin-top:12px">${id&&dono()?`<button class="btn d" onclick="fechar();confirmar('Excluir a ficha ${esc(o.numero)}?',()=>delOS('${id}'))">Excluir</button>`:''}${id?`<button class="btn" onclick="salvarOS('${id}',true)">🖨️ Salvar e imprimir</button>`:''}<span class="sp"></span><button class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bos2" onclick="salvarOS('${id||''}')">Salvar</button></div>`);
   $('#mbox').style.width='min(980px,100%)';{const nf=$('#fos [name=numero]');nf.autocomplete='off';if(!id){nf.placeholder='Gerando número…';proxNumOS().then(n=>{if(n&&!nf.value){nf.value=n;nf.dataset.sug=n;nf.title='Número gerado automaticamente. Não precisa digitar.'}})}}
   S._osCompTrava=!!o.componentes_baixados;(o.componentes||[]).forEach(c=>osCompLinha(c));
+  (o.servicos&&o.servicos.length?o.servicos:[{}]).forEach(x=>osServLinha(x));osServTot();
 }
+const prodsServ=()=>S.produtos.filter(p=>servico(p)&&p.ativo!==false);
+const osServVal=l=>(+l.qtd||0)*(+l.preco||0)*(1-(+l.pct||0)/100);
+function osServLinha(x={}){
+  const d=document.createElement('div');d.className='ossl';d.style.cssText='display:grid;grid-template-columns:1fr 70px 110px 70px 110px 34px;gap:6px;align-items:center;margin-bottom:6px';
+  const ls=prodsServ();
+  d.innerHTML=`<select class="osp" onchange="osServPreco(this)"><option value="">Escolha o serviço</option>${ls.map(p=>`<option value="${p.id}" data-pr="${+p.preco||0}" ${p.id===x.produto_id?'selected':''}>${esc(p.nome)}</option>`).join('')}${x.produto_id&&!ls.find(p=>p.id===x.produto_id)?`<option value="${esc(x.produto_id)}" selected>${esc(x.nome||'Serviço')}</option>`:''}</select><input class="osq" type="number" min="0" step="any" value="${x.qtd??1}" oninput="osServTot()"><input class="osu" type="number" min="0" step="0.01" value="${x.preco??''}" placeholder="0,00" oninput="osServTot()"><input class="osd" type="number" min="0" max="100" step="any" value="${x.pct??0}" oninput="osServTot()"><b class="ost" style="text-align:right;white-space:nowrap">R$ 0,00</b><button type="button" class="btn sm d" onclick="this.parentNode.remove();osServTot()">×</button>`;
+  $('#osserv').appendChild(d);
+  if(!ls.length&&!$('#osserv .osaviso'))$('#osserv').insertAdjacentHTML('afterend','<p class="osaviso" style="color:var(--warn);font-size:12.5px">Cadastre os serviços em Produtos com a categoria "Serviço" e o preço.</p>');
+}
+function osServPreco(sel){const l=sel.parentNode,o=sel.selectedOptions[0];if(o&&o.dataset.pr!=null&&o.value)l.querySelector('.osu').value=(+o.dataset.pr).toFixed(2);osServTot()}
+function osServLer(){return [...document.querySelectorAll('#osserv .ossl')].map(l=>{const s=l.querySelector('.osp'),o=s.selectedOptions[0];return {produto_id:s.value,nome:o?o.textContent:'',qtd:+l.querySelector('.osq').value||0,preco:+l.querySelector('.osu').value||0,pct:+l.querySelector('.osd').value||0}}).filter(x=>x.produto_id&&x.qtd>0)}
+function osServTot(){let t=0;document.querySelectorAll('#osserv .ossl').forEach(l=>{const v=osServVal({qtd:l.querySelector('.osq').value,preco:l.querySelector('.osu').value,pct:l.querySelector('.osd').value});t+=v;l.querySelector('.ost').textContent=R(v)});const e=$('#ostot');if(e)e.textContent=R(t)}
 const prodsEst=()=>S.produtos.filter(p=>!servico(p)&&p.ativo!==false);
 function osCompLinha(c={}){
   const d=document.createElement('div');d.className='oscl';d.style.cssText='display:grid;grid-template-columns:1fr 80px 90px 34px;gap:6px;align-items:center;margin-bottom:6px';
@@ -955,20 +974,22 @@ function osCompLinha(c={}){
 async function proxNumOS(){try{const E=S.empresa.id;
   const a=await q(sb.from('ordens_servico').select('seq').eq('empresa_id',E).not('seq','is',null).order('seq',{ascending:false}).limit(1));
   return String(((a[0]&&+a[0].seq)||0)+1).padStart(6,'0')+'-1'}catch(e){return ''}}
-function salvarOS(id){
+function salvarOS(id,imp){
   const fm=$('#fos'),d={};
   if(!S._osCompTrava)d.componentes=[...document.querySelectorAll('#oscomp .oscl')].map(l=>({produto_id:l.querySelector('.ocp').value,qtd:+l.querySelector('.ocq').value||0,cobrar:l.querySelector('.occ').checked})).filter(c=>c.produto_id&&c.qtd>0);
-  [...fm.elements].forEach(e=>{if(!e.name||e.closest('#oscomp'))return;if(e.type==='checkbox')d[e.name]=e.checked;else if(e.tagName==='SELECT'&&(e.name==='antagonista'||e.name==='registro'))d[e.name]=e.value===''?null:e.value==='true';else if(e.type==='number')d[e.name]=e.value===''?null:+e.value;else d[e.name]=e.value.trim()||null});
+  d.servicos=osServLer();
+  [...fm.elements].forEach(e=>{if(!e.name||e.closest('#oscomp')||e.closest('#osserv'))return;if(e.type==='checkbox')d[e.name]=e.checked;else if(e.tagName==='SELECT'&&(e.name==='antagonista'||e.name==='registro'))d[e.name]=e.value===''?null:e.value==='true';else if(e.type==='number')d[e.name]=e.value===''?null:+e.value;else d[e.name]=e.value.trim()||null});
   busy($('#bos2'),async()=>{
-    if(id)await q(sb.from('ordens_servico').update(d).eq('id',id));
+    if(id){await q(sb.from('ordens_servico').update(d).eq('id',id));const ox=(S._os||[]).find(x=>x.id===id);if(ox)Object.assign(ox,d)}
     else{const r=await q(sb.from('ordens_servico').insert({...d,empresa_id:S.empresa.id}).select('numero'));toast('Ficha '+(r[0]&&r[0].numero||'')+' criada')}
-    fechar();render();
+    fechar();render();if(imp&&id)imprimirOS(id);
   });
 }
 async function delOS(id){try{await q(sb.from('ordens_servico').delete().eq('id',id));toast('Ficha excluída');render()}catch(e){erro(e)}}
 function finalizarOS(id){
   const o=(S._os||[]).find(x=>x.id===id);if(!o)return;
   S.cart=[];S.pdvF={...S.pdvF,cli:o.cliente_id||'',pac:o.paciente||'',fic:o.numero||'',ent:o.data_entrada||'',os:o.id,pg:o.cliente_id?'Fiado':S.pdvF.pg};
+  (o.servicos||[]).forEach(x=>{const p=P(x.produto_id);S.cart.push({produto_id:x.produto_id,nome:(p&&p.nome)||x.nome,qtd:+x.qtd,preco:+(((+x.preco)*(1-(+x.pct||0)/100)).toFixed(2))})});
   if(!o.componentes_baixados)(o.componentes||[]).filter(c=>c.cobrar).forEach(c=>{const p=P(c.produto_id);if(p)S.cart.push({produto_id:p.id,nome:p.nome,qtd:+c.qtd,preco:p.preco})});
   go('pdv');toast('Escolha os serviços da ficha '+o.numero+' e finalize a venda');
 }
@@ -979,8 +1000,9 @@ async function imprimirOS(id){
   let v=null;if(o.venda_id){try{v=normVenda((await q(sb.from('vendas').select('*,venda_itens(*)').eq('id',o.venda_id)))[0])}catch(e){}}
   const els=String(o.elementos||'').split(/[^0-9]+/).filter(Boolean).map(Number);
   const dt=x=>x?new Date(String(x).length===10?x+'T12:00':x).toLocaleDateString('pt-BR'):'';
-  const its=v&&v.itens&&v.itens.length?v.itens.map(i=>({q:i.qtd,d:i.nome,u:+i.preco,t:(+i.qtd)*(+i.preco)})):[{q:1,d:o.trabalho||'',u:null,t:null}];
-  const sub=its.reduce((s,i)=>s+(i.t||0),0),desc=v?+(v.desconto||0):0,tot=v?(+v.total||sub-desc):null;
+  const sv=(o.servicos||[]).filter(x=>x.produto_id);
+  const its=v&&v.itens&&v.itens.length?v.itens.map(i=>({q:i.qtd,d:i.nome,u:+i.preco,p:0,t:(+i.qtd)*(+i.preco)})):sv.length?sv.map(x=>{const p=P(x.produto_id);return {q:+x.qtd,d:(p&&p.nome)||x.nome,u:+x.preco,p:+x.pct||0,t:osServVal(x)}}):[{q:1,d:o.trabalho||'',u:null,p:null,t:null}];
+  const sub=its.reduce((s,i)=>s+(i.t||0),0),desc=v?+(v.desconto||0):0,tem=!!v||sv.length>0,tot=v?(+v.total||sub-desc):sv.length?sub:null;
   const nd=els.length?els.join(', '):'',ncol=els.length||'';
   let bar='';try{if(window.JsBarcode&&o.numero){const sv=document.createElementNS('http://www.w3.org/2000/svg','svg');JsBarcode(sv,String(o.numero),{format:'CODE128',displayValue:false,margin:0,height:34,width:1.4});bar=sv.outerHTML}}catch(e){}
   const ini=(emp.nome||'').replace(/laborat[oó]rio|de|pr[oó]teses?|eireli|ltda|me/gi,'').trim().split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase()||'LAB';
@@ -1012,8 +1034,8 @@ async function imprimirOS(id){
    ${o.urgente?'<div class="xt-urg">⚡ URGENTE</div>':''}
    <div class="xt-box">Cliente: ${esc(c.nome||'')}<br>Conveniado: ${esc(o.paciente||'')}${o.sexo?' ('+esc(o.sexo)+')':''}<br>Ficha: ${esc(o.numero)}${o.dentista?' '+esc(o.dentista):''}<br>Endereço: ${esc(c.endereco||'')}</div>
    <table class="xt-tb"><tr><th style="width:38px">Qtd.</th><th style="width:48px">Dentes</th><th style="width:70px">Elem.</th><th>Descrição (Serviços)</th><th class="n" style="width:78px">Unitário</th><th class="n" style="width:38px">%</th><th class="n" style="width:78px">Total</th></tr>
-   ${its.map((i,k)=>`<tr><td>${N(i.q)}</td><td>${k?'':ncol}</td><td>${k?'':esc(nd)}</td><td>${esc(i.d)}</td><td class="n">${i.u==null?'':R(i.u)}</td><td class="n">${i.u==null?'':'0,00'}</td><td class="n">${i.t==null?'':R(i.t)}</td></tr>`).join('')}</table>
-   <div class="xt-mid"><div></div><div>${v?`<div class="xt-sub">Subtotal ${R(sub)}${desc?' · Desconto '+R(desc):''}</div>`:''}<div class="xt-tot">Total Pedido: ${tot==null?'—':R(tot)}</div><div class="xt-sig">Recebemos o(s) trabalho(s) acima</div></div></div>
+   ${its.map((i,k)=>`<tr><td>${N(i.q)}</td><td>${k?'':ncol}</td><td>${k?'':esc(nd)}</td><td>${esc(i.d)}</td><td class="n">${i.u==null?'':R(i.u)}</td><td class="n">${i.u==null?'':(+i.p||0).toFixed(2).replace('.',',')}</td><td class="n">${i.t==null?'':R(i.t)}</td></tr>`).join('')}</table>
+   <div class="xt-mid"><div></div><div>${tem?`<div class="xt-sub">Subtotal ${R(sub)}${desc?' · Desconto '+R(desc):''}</div>`:''}<div class="xt-tot">Total Pedido: ${tot==null?'—':R(tot)}</div><div class="xt-sig">Recebemos o(s) trabalho(s) acima</div></div></div>
    <div class="xt-inf"><div><p>Escala: ${esc(o.escala||'')}</p><p>Cor: ${esc(o.cor||'')}</p><p>Antagonista: ${sn(o.antagonista)}</p><p>Modelo:</p><p>Mat. Forne:</p><p>Mat. Devol.:</p><p>Caixa:</p></div>
     <div>${arc}<div class="xt-leg">C - Coroa &nbsp;I - Implante &nbsp;L - Laminado &nbsp;O - Onlay-Inlay &nbsp;P - Pôntico &nbsp;A - Ausente</div></div></div>
    <div class="xt-obs">OBS:<br>${esc(o.obs||o.trabalho||'')}</div>
