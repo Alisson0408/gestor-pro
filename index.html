@@ -824,10 +824,10 @@ async function relServ(cid){
 }
 function txtRelServ(){const r=S._rsDoc,F=S.rs,dt=x=>new Date(x+'T12:00').toLocaleDateString('pt-BR');return `*${r.emp.nome}*\nServiços executados de ${dt(F.de)} a ${dt(F.ate)}\nCliente: ${r.c.nome}\n\n${r.ln.map(l=>`• ${N(l.qtd)}x ${l.desc}${l.pac?' — Pac. '+l.pac:''} — ${R(l.valor)}`).join('\n')}\n\n*Total: ${R(r.total)}*\nPagamentos no período: ${R(r.pago)}\nDiferença: ${R(r.pago-r.total)}\n\nSegue o relatório em PDF. Qualquer dúvida estamos à disposição!`}
 function copiarRelServ(){navigator.clipboard.writeText(txtRelServ()).then(()=>toast('Resumo copiado!'),()=>toast('Não foi possível copiar',1))}
-function imprimirDoc(html,titulo){
+function imprimirDoc(html,titulo,pg,mg){
   let area=$('#printArea');if(!area){area=document.createElement('div');area.id='printArea';document.body.appendChild(area)}
   let css=$('#pagecss');if(!css){css=document.createElement('style');css.id='pagecss';document.head.appendChild(css)}
-  css.textContent='@page{size:A4;margin:12mm}';area.innerHTML=html;
+  css.textContent='@page{size:'+(pg||'A4')+';margin:'+(mg||'12mm')+'}';area.innerHTML=html;
   const t=document.title;document.title=titulo;
   setTimeout(()=>{try{window.print()}catch(e){toast('Não foi possível abrir a impressão',1)}document.title=t},300);
 }
@@ -924,7 +924,7 @@ function formOS(id){
     <div style="grid-column:span 2"><label>Clínica / Consultório (cliente)</label><select name="cliente_id">${optsList(S.clientes,o.cliente_id||'','Escolha a clínica')}</select></div>${inp('dentista','Cirurgião-dentista',undefined,'style="grid-column:span 2"')}
     ${inp('paciente','Paciente',undefined,'style="grid-column:span 2"')}<div><label>Sexo</label><select name="sexo"><option value="">—</option>${['Fem.','Mas.'].map(x=>`<option ${o.sexo===x?'selected':''}>${x}</option>`).join('')}</select></div><div><label>Tipo</label><select name="tipo">${['Pedido','Retorno','Remoldagem','Conserto'].map(x=>`<option ${o.tipo===x?'selected':''}>${x}</option>`).join('')}</select></div>
     ${inp('cor','Cor do dente')}${inp('escala','Escala')}${inp('pastilhas','Pastilhas')}${inp('substrato','Substrato')}
-    <div style="grid-column:span 4"><label>Trabalho a ser executado</label><textarea name="trabalho" rows="2" style="width:100%">${esc(o.trabalho||'')}</textarea></div>
+    <div style="grid-column:span 3"><label>Trabalho a ser executado</label><textarea name="trabalho" rows="2" style="width:100%">${esc(o.trabalho||'')}</textarea></div>${inp('elementos','Elementos (dentes) · ex.: 47 ou 11, 21')}
     ${inp('moldeira_parcial','Moldeira parcial (qtd)','number')}${inp('moldeira_total','Moldeira total (qtd)','number')}${sn('antagonista','Antagonista')}${sn('registro','Registro')}
     <div style="grid-column:span 4;font-weight:700;margin-top:4px">Componentes</div>
     ${inp('ucla_cliente','UCLA do cliente')}${inp('analogo_cliente','Análogo do cliente')}${inp('parafuso_cliente','Parafuso do cliente')}${inp('secao','Seção')}
@@ -969,15 +969,54 @@ function finalizarOS(id){
   if(!o.componentes_baixados)(o.componentes||[]).filter(c=>c.cobrar).forEach(c=>{const p=P(c.produto_id);if(p)S.cart.push({produto_id:p.id,nome:p.nome,qtd:+c.qtd,preco:p.preco})});
   go('pdv');toast('Escolha os serviços da ficha '+o.numero+' e finalize a venda');
 }
+const OS_RODAPE='FECHAMENTO DAS NOTAS DE 01 A 30, COM ACERTO ATÉ DIA 10 DO MÊS SUBSEQUENTE.';
+const OS_ARC=[[18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28],[48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38]];
 async function imprimirOS(id){
   const o=(S._os||[]).find(x=>x.id===id);if(!o)return;const emp=await empDados();const c=S.clientes.find(x=>x.id===o.cliente_id)||{};
-  const L=(l,v)=>`<tr><td style="width:30%"><b>${l}</b></td><td>${esc(v==null||v===''?'—':String(v))}</td></tr>`,sn=v=>v===true?'Sim':v===false?'Não':'—';
-  const doc=`<div class="rsdoc"><div class="rs-h"><div><div class="rs-emp">${esc(emp.nome)}</div><div class="rs-sub">${[emp.endereco,emp.telefone||emp.whatsapp].filter(Boolean).map(esc).join(' · ')}</div></div><div class="rs-tit">Ordem de Serviço<div class="rs-sub" style="font-size:16px;color:#1d2433;font-weight:800">Nº ${esc(o.numero)}</div></div></div>
-  ${o.urgente?'<div style="background:#fdecec;color:#c0392b;font-weight:800;padding:6px 8px;margin-bottom:8px">⚡ URGENTE</div>':''}
-  <table class="rs-t"><tbody>${L('Data de entrada',dataBR(o.data_entrada))}${L('Prevista',dataBR(o.prevista))}${L('Clínica / Consultório',c.nome)}${L('Cirurgião-dentista',o.dentista)}${L('Paciente',(o.paciente||'—')+(o.sexo?' ('+o.sexo+')':''))}${L('Cor do dente / Escala',[o.cor,o.escala].filter(Boolean).join(' · '))}${L('Trabalho a ser executado',o.trabalho)}${L('Moldeira parcial / total',(o.moldeira_parcial??'—')+' / '+(o.moldeira_total??'—'))}${L('Antagonista / Registro',sn(o.antagonista)+' / '+sn(o.registro))}${L('Cliente: UCLA · Análogo · Parafuso',[o.ucla_cliente,o.analogo_cliente,o.parafuso_cliente].map(x=>x||'—').join(' · '))}${L('Laborat.: UCLA · Análogo · Parafuso',[o.ucla_lab,o.analogo_lab,o.parafuso_lab].map(x=>x||'—').join(' · '))}${L('Retorno p/ o dentista',[o.rd1,o.rd2,o.rd3].map(dataBR).join('   '))}${L('Retorno p/ o laboratório',[o.rl1,o.rl2,o.rl3].map(dataBR).join('   '))}${L('Pastilhas / Substrato',[o.pastilhas,o.substrato].filter(Boolean).join(' · '))}</tbody></table>
-  <div style="border:1px solid #1d2433;min-height:90px;padding:6px 8px;margin-top:10px"><b>Observações:</b><br>${esc(o.obs||'')}</div>
-  <div class="rs-rod">Impresso em ${new Date().toLocaleDateString('pt-BR')} · ${esc(emp.nome)}</div></div>`;
-  imprimirDoc(doc,'Ficha '+o.numero);
+  let v=null;if(o.venda_id){try{v=normVenda((await q(sb.from('vendas').select('*,venda_itens(*)').eq('id',o.venda_id)))[0])}catch(e){}}
+  const els=String(o.elementos||'').split(/[^0-9]+/).filter(Boolean).map(Number);
+  const dt=x=>x?new Date(String(x).length===10?x+'T12:00':x).toLocaleDateString('pt-BR'):'';
+  const its=v&&v.itens&&v.itens.length?v.itens.map(i=>({q:i.qtd,d:i.nome,u:+i.preco,t:(+i.qtd)*(+i.preco)})):[{q:1,d:o.trabalho||'',u:null,t:null}];
+  const sub=its.reduce((s,i)=>s+(i.t||0),0),desc=v?+(v.desconto||0):0,tot=v?(+v.total||sub-desc):null;
+  const nd=els.length?els.join(', '):'',ncol=els.length||'';
+  let bar='';try{if(window.JsBarcode&&o.numero){const sv=document.createElementNS('http://www.w3.org/2000/svg','svg');JsBarcode(sv,String(o.numero),{format:'CODE128',displayValue:false,margin:0,height:34,width:1.4});bar=sv.outerHTML}}catch(e){}
+  const ini=(emp.nome||'').replace(/laborat[oó]rio|de|pr[oó]teses?|eireli|ltda|me/gi,'').trim().split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase()||'LAB';
+  const arc=OS_ARC.map((r,k)=>`<div class="xt-arc ${k?'b':''}">${r.map((n,j)=>`<span class="${els.includes(n)?'on':''}${j===7?' mid':''}">${n}</span>`).join('')}</div>`).join('');
+  const sn=x=>x===true?'Sim':x===false?'Não':'';
+  const doc=`<style>.xt{font-family:Arial,Helvetica,sans-serif;color:#000;font-size:10.5px;line-height:1.35;background:#fff}
+  .xt-h{display:grid;grid-template-columns:54px 1fr 205px;gap:10px;align-items:start}
+  .xt-logo{width:54px;height:54px;border:1.5px solid #000;display:grid;place-items:center;font-weight:900;font-size:17px;letter-spacing:1px}
+  .xt-emp{text-align:center;font-weight:800;font-size:14px;text-transform:uppercase;padding-top:4px}
+  .xt-r{text-align:right}.xt-r .t{font-weight:700;font-size:12px}.xt-r .n{font-weight:800;font-size:18px;letter-spacing:.5px}.xt-r svg{width:190px;height:34px;display:block;margin:2px 0 3px auto}
+  .xt-dt{border:1px solid #000;padding:3px 6px;font-size:9.5px;text-align:left;margin-top:2px}
+  .xt-box{border:1.5px solid #000;padding:5px 7px;margin-top:6px;font-weight:700;text-transform:uppercase;font-size:10.5px}
+  .xt-tb{width:100%;border-collapse:collapse;margin-top:6px;font-size:10.5px}.xt .xt-tb th{border:1.5px solid #000;padding:3px 5px;text-align:left;color:#000;background:#fff;text-transform:none;letter-spacing:0;font-size:10.5px;font-weight:700}.xt .xt-tb td{color:#000;background:#fff}.xt-tb td{border:1px solid #000;padding:3px 5px;font-weight:700;text-transform:uppercase}.xt .xt-tb .n{text-align:right;white-space:nowrap}
+  .xt-mid{display:grid;grid-template-columns:1fr 230px;gap:14px;margin-top:6px}
+  .xt-tot{background:#555;color:#fff;font-weight:800;font-size:13px;padding:6px 10px;text-align:right;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .xt-sub{text-align:right;font-weight:700;font-size:10px}
+  .xt-sig{margin-top:22px;border-top:1px solid #000;font-size:8.5px;text-align:center;padding-top:2px}
+  .xt-inf{display:grid;grid-template-columns:1fr 1.45fr;gap:12px;margin-top:8px;font-weight:700;font-size:10.5px}.xt-inf div p{margin:0 0 2px}
+  .xt-arc{display:flex;font-size:10.5px;font-weight:700}.xt-arc span{width:17px;text-align:center}.xt-arc span.mid{border-right:1.5px solid #000}.xt-arc.b{border-top:1.5px solid #000}
+  .xt-arc span.on{background:#000;color:#fff;border-radius:2px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .xt-leg{font-size:9.5px;font-weight:700;margin-top:3px}
+  .xt-obs{margin-top:8px;font-weight:700;font-size:10.5px;min-height:34px;text-transform:uppercase}
+  .xt-rod{margin-top:8px;text-align:center;font-weight:800;font-size:10.5px}
+  .xt-urg{border:1.5px solid #000;font-weight:900;text-align:center;padding:2px;margin-top:4px}</style>
+  <div class="xt">
+   <div class="xt-h"><div class="xt-logo">${esc(ini)}</div><div class="xt-emp">${esc(emp.nome)}${emp.endereco||emp.telefone?`<div style="font-size:9px;font-weight:600;text-transform:none;margin-top:2px">${[emp.endereco,emp.telefone,emp.documento?'CNPJ '+emp.documento:''].filter(Boolean).map(esc).join(' · ')}</div>`:''}</div>
+    <div class="xt-r"><div class="t">Extrato Individual</div><div class="n">${esc(o.numero)}</div>${bar}
+     <div class="xt-dt">Entrada: ${dt(o.data_entrada)}<br>Prevista: ${dt(o.prevista)}<br>Finalizado: ${v?dt(v.data):''}</div></div></div>
+   ${o.urgente?'<div class="xt-urg">⚡ URGENTE</div>':''}
+   <div class="xt-box">Cliente: ${esc(c.nome||'')}<br>Conveniado: ${esc(o.paciente||'')}${o.sexo?' ('+esc(o.sexo)+')':''}<br>Ficha: ${esc(o.numero)}${o.dentista?' '+esc(o.dentista):''}<br>Endereço: ${esc(c.endereco||'')}</div>
+   <table class="xt-tb"><tr><th style="width:38px">Qtd.</th><th style="width:48px">Dentes</th><th style="width:70px">Elem.</th><th>Descrição (Serviços)</th><th class="n" style="width:78px">Unitário</th><th class="n" style="width:38px">%</th><th class="n" style="width:78px">Total</th></tr>
+   ${its.map((i,k)=>`<tr><td>${N(i.q)}</td><td>${k?'':ncol}</td><td>${k?'':esc(nd)}</td><td>${esc(i.d)}</td><td class="n">${i.u==null?'':R(i.u)}</td><td class="n">${i.u==null?'':'0,00'}</td><td class="n">${i.t==null?'':R(i.t)}</td></tr>`).join('')}</table>
+   <div class="xt-mid"><div></div><div>${v?`<div class="xt-sub">Subtotal ${R(sub)}${desc?' · Desconto '+R(desc):''}</div>`:''}<div class="xt-tot">Total Pedido: ${tot==null?'—':R(tot)}</div><div class="xt-sig">Recebemos o(s) trabalho(s) acima</div></div></div>
+   <div class="xt-inf"><div><p>Escala: ${esc(o.escala||'')}</p><p>Cor: ${esc(o.cor||'')}</p><p>Antagonista: ${sn(o.antagonista)}</p><p>Modelo:</p><p>Mat. Forne:</p><p>Mat. Devol.:</p><p>Caixa:</p></div>
+    <div>${arc}<div class="xt-leg">C - Coroa &nbsp;I - Implante &nbsp;L - Laminado &nbsp;O - Onlay-Inlay &nbsp;P - Pôntico &nbsp;A - Ausente</div></div></div>
+   <div class="xt-obs">OBS:<br>${esc(o.obs||o.trabalho||'')}</div>
+   <div class="xt-rod">${OS_RODAPE}</div>
+  </div>`;
+  imprimirDoc(doc,'Extrato '+o.numero,'A5 landscape','8mm');
 }
 async function defFinVer(uid,v){try{await rpc('definir_fin_ver',{p_empresa:S.empresa.id,p_user:uid,p_valor:v});toast(v?'Financeiro somente para visualizar':'Financeiro liberado');render()}catch(e){erro(e);render()}}
 // ---- Manual do sistema (sempre atualizado: arquivos manual/*.html e *.pdf no próprio site)
