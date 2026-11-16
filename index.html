@@ -450,7 +450,7 @@ VIEWS.pdv=()=>{
   const bruto=S.cart.reduce((s,i)=>s+i.qtd*i.preco,0);
   return `<h1>Vender (PDV)</h1><p class="sub">Toque nos produtos ou digite/bipe o código de barras e aperte Enter.</p>
   <div class="pdv">
-    <div class="card"><input id="bp" placeholder="🔎 Buscar por nome ou código..." value="${esc(S.busca)}" oninput="S.busca=this.value;S._refocus='bp';render()" onkeydown="if(event.key==='Enter'){const p=S.produtos.find(x=>(x.codigo||'')===this.value.trim());if(p){add(p.id);S.busca='';render()}}" style="margin-bottom:14px">
+    <div class="card"><input id="bp" placeholder="🔎 Buscar por nome ou código..." value="${esc(S.busca)}" autocomplete="off" oninput="S.busca=this.value;clearTimeout(S._bt);S._bt=setTimeout(()=>{S._refocus='bp';render()},300)" onkeydown="if(event.key==='Enter'){event.preventDefault();clearTimeout(S._bt);pdvCodigo(this.value)}" style="margin-bottom:14px">
     <div class="prods">${lista.map(p=>`<div class="pc ${p.estoque<=0&&!servico(p)?'off':''}" onclick="add('${p.id}')"><div class="n">${esc(p.nome)}${p.descricao?`<div style="font-weight:500;font-size:11px;color:var(--muted)">${esc(p.descricao)}</div>`:''}</div><div class="p">${R(p.preco)}</div><div class="s">${servico(p)?'Serviço':'Estoque: '+N(p.estoque)+' '+esc(p.unidade)}</div></div>`).join('')||'<div class="empty">Nenhum produto</div>'}</div></div>
     <div class="card cart"><h3>Carrinho <span class="tag t-blue">${N(S.cart.reduce((s,i)=>s+i.qtd,0))} itens</span></h3>
       ${S.cart.length?S.cart.map((i,ix)=>`<div class="it"><div class="n">${esc(i.nome)}<div style="color:var(--muted);font-size:12px;font-weight:500">${R(i.preco)} cada</div></div><div class="qty"><button onclick="qt(${ix},-1)">−</button><b style="min-width:22px;text-align:center">${N(i.qtd)}</b><button onclick="qt(${ix},1)">+</button></div><b style="min-width:80px;text-align:right">${R(i.qtd*i.preco)}</b></div>`).join(''):'<div class="empty">Carrinho vazio</div>'}
@@ -469,6 +469,26 @@ VIEWS.pdv=()=>{
     </div>
   </div>`;
 };
+// ---- Leitor de código de barras no PDV (funciona mesmo sem clicar na busca)
+function pdvCodigo(c){
+  c=String(c||'').trim();if(!c)return;
+  const lo=x=>String(x||'').trim().toLowerCase(),nz=x=>lo(x).replace(/^0+/,'');
+  let p=S.produtos.find(x=>x.codigo&&lo(x.codigo)===lo(c))||S.produtos.find(x=>x.codigo&&nz(x.codigo)&&nz(x.codigo)===nz(c));
+  if(!p){const l=S.produtos.filter(x=>x.ativo!==false&&lo(x.nome).includes(lo(c)));if(l.length===1)p=l[0]}
+  if(p){add(p.id);S.busca='';S._refocus='bp';render()}
+  else{S.busca=c;S._refocus='bp';render();toast('Código "'+c+'" não encontrado. Confira o código no cadastro do produto.',1)}
+}
+(function(){let buf='',t0=0;
+  document.addEventListener('keydown',e=>{
+    if(S.view!=='pdv'||e.ctrlKey||e.altKey||e.metaKey)return;
+    const a=document.activeElement,tag=a&&a.tagName;
+    if(a&&a.id==='bp')return;
+    if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||(a&&a.isContentEditable)||document.querySelector('.modal.on,#mbox:not(:empty)')&&$('#mbox')&&$('#mbox').offsetParent)return;
+    const now=Date.now();if(now-t0>80)buf='';t0=now;
+    if(e.key==='Enter'){if(buf.length>=3){e.preventDefault();const c=buf;buf='';pdvCodigo(c)}return}
+    if(e.key.length===1)buf+=e.key;
+  },true);
+})();
 function add(id){const p=P(id);const i=S.cart.find(x=>x.produto_id===id);const qn=(i?i.qtd:0)+1;if(!servico(p)&&qn>p.estoque)return toast('Sem estoque suficiente de '+p.nome,1);if(i)i.qtd++;else S.cart.push({produto_id:id,nome:p.nome,qtd:1,preco:p.preco});S._focus=0;render()}
 function qt(ix,d){const i=S.cart[ix];const p=P(i.produto_id);i.qtd+=d;if(p&&!servico(p)&&i.qtd>p.estoque){i.qtd=p.estoque;toast('Limite do estoque',1)}if(i.qtd<=0)S.cart.splice(ix,1);S._focus=0;render()}
 function finalizar(b,conferido){
@@ -1051,13 +1071,13 @@ async function imprimirOS(id){
    <div class="xt-inf"><div><p>Escala: ${esc(o.escala||'')}</p><p>Cor: ${esc(o.cor||'')}</p><p>Antagonista: ${sn(o.antagonista)}</p><p>Modelo:</p><p>Mat. Forne:</p><p>Mat. Devol.:</p><p>Caixa:</p></div>
     <div>${arc}<div class="xt-leg">C - Coroa &nbsp;I - Implante &nbsp;L - Laminado &nbsp;O - Onlay-Inlay &nbsp;P - Pôntico &nbsp;A - Ausente</div></div></div>
    <div class="xt-obs">OBS:<br>${esc(o.obs||o.trabalho||'')}</div>
-   <div class="xt-rod">${OS_RODAPE}</div>
+   ${/laborat/i.test(emp.nome||S.empresa.nome||'')?`<div class="xt-rod">${OS_RODAPE}</div>`:''}
   </div>`;
   imprimirDoc(`<div style="zoom:1.36;width:770px">${doc}</div>`,'Extrato '+o.numero,'A4 landscape','9mm');
 }
 async function defFinVer(uid,v){try{await rpc('definir_fin_ver',{p_empresa:S.empresa.id,p_user:uid,p_valor:v});toast(v?'Financeiro somente para visualizar':'Financeiro liberado');render()}catch(e){erro(e);render()}}
 // ---- Manual do sistema (sempre atualizado: arquivos manual/*.html e *.pdf no próprio site)
-const manualId=()=>S.empresa&&(S.empresa.os_ativo||/laborat/i.test(S.empresa.nome||''))?'lab':'nexus';
+const manualId=()=>S.empresa&&/laborat/i.test(S.empresa.nome||'')?'lab':'nexus';
 VIEWS.manual=async()=>{
   const k=manualId(),v=Date.now(),url=`manual/${k}.html?v=${v}`,pdf=`manual/${k}.pdf?v=${v}`;
   return `<div class="row"><div><h1>📘 Manual do Gestor PRO</h1><p class="sub">Guia completo de ${esc(S.empresa.nome)}, sempre atualizado. Leia aqui, baixe em PDF ou imprima.</p></div><span class="sp"></span>
