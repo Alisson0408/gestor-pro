@@ -116,7 +116,7 @@ input:focus,select:focus{border-color:var(--brand)}
 .rs-t{width:100%;border-collapse:collapse;font-size:11.5px}.rs-t th{background:#1d2433;color:#fff;text-align:left;padding:5px 6px;font-weight:600}.rs-t td{padding:5px 6px;border-bottom:1px solid #dde3ef;color:#1d2433;background:#fff}.rs-t .n,.rs-t .nw{text-align:right;white-space:nowrap}.rs-t .nw{text-align:left}
 .rs-tot{margin:10px 0 0 auto;max-width:330px}.rs-tot div{display:flex;justify-content:space-between;gap:10px;padding:2px 0}.rs-dif{border-top:1px solid #1d2433;margin-top:4px;padding-top:4px!important;font-size:13px}
 .rs-rod{margin-top:16px;font-size:10px;color:#8d99bd;text-align:center}
-@media print{body>*:not(#printArea){display:none!important}#printArea{display:block}#printArea .etq{box-shadow:none;border-radius:0}body{background:#fff}}
+@media print{html,body{background:#fff!important;color-scheme:light!important}body>*:not(#printArea){display:none!important}#printArea{display:block}#printArea .etq{box-shadow:none;border-radius:0}body{background:#fff}}
 .contas{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
 .cb{position:relative;overflow:hidden}
 .cb .bk{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
@@ -1019,7 +1019,7 @@ async function imprimirOS(id){
    <div class="xt-obs">OBS:<br>${esc(o.obs||o.trabalho||'')}</div>
    <div class="xt-rod">${OS_RODAPE}</div>
   </div>`;
-  imprimirDoc(`<div style="zoom:1.36">${doc}</div>`,'Extrato '+o.numero,'A4 landscape','9mm');
+  imprimirDoc(`<div style="zoom:1.36;width:770px">${doc}</div>`,'Extrato '+o.numero,'A4 landscape','9mm');
 }
 async function defFinVer(uid,v){try{await rpc('definir_fin_ver',{p_empresa:S.empresa.id,p_user:uid,p_valor:v});toast(v?'Financeiro somente para visualizar':'Financeiro liberado');render()}catch(e){erro(e);render()}}
 // ---- Manual do sistema (sempre atualizado: arquivos manual/*.html e *.pdf no próprio site)
