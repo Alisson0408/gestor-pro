@@ -497,7 +497,7 @@ function finalizar(b,conferido){
   busy(b,async()=>{
     const F=S.pdvF,fiado=F.pg==='Fiado';
     if(fiado&&!F.cli)return toast('Escolha ou cadastre o cliente para vender fiado',1);
-    const r=await rpc('registrar_venda',{p_empresa:S.empresa.id,p_itens:S.cart.map(i=>({produto_id:i.produto_id,qtd:i.qtd})),p_desconto:+F.desc||0,p_pagamento:F.pg,p_cliente:null,
+    const r=await rpc('registrar_venda',{p_empresa:S.empresa.id,p_itens:S.cart.map(i=>({produto_id:i.produto_id,qtd:i.qtd,preco:+i.preco})),p_desconto:+F.desc||0,p_pagamento:F.pg,p_cliente:null,
       p_cliente_id:F.cli||null,p_conta:fiado?null:(F.conta||null),p_vencimento:fiado?(F.venc||addDays(today(),30)):null,p_paciente:F.pac||null,p_ficha:F.fic||null,p_entrada:F.ent||null});
     if(F.os){try{const o=(await q(sb.from('ordens_servico').select('numero,componentes,componentes_baixados').eq('id',F.os)))[0];let falhas=[];
       if(o&&!o.componentes_baixados){for(const c of (o.componentes||[]).filter(c=>!c.cobrar)){try{await rpc('registrar_saida',{p_produto:c.produto_id,p_qtd:+c.qtd,p_motivo:'Uso na OS '+o.numero,p_obs:null})}catch(e){falhas.push((P(c.produto_id)||{}).nome||'componente')}}}
@@ -945,8 +945,9 @@ function formOS(id){
     ${inp('paciente','Paciente',undefined,'style="grid-column:span 2"')}<div><label>Sexo</label><select name="sexo"><option value="">—</option>${['Fem.','Mas.'].map(x=>`<option ${o.sexo===x?'selected':''}>${x}</option>`).join('')}</select></div><div><label>Tipo</label><select name="tipo">${['Pedido','Retorno','Remoldagem','Conserto'].map(x=>`<option ${o.tipo===x?'selected':''}>${x}</option>`).join('')}</select></div>
     ${inp('cor','Cor do dente')}${inp('escala','Escala')}${inp('pastilhas','Pastilhas')}${inp('substrato','Substrato')}
     <div style="grid-column:span 3"><label>Trabalho a ser executado</label><textarea name="trabalho" rows="2" style="width:100%">${esc(o.trabalho||'')}</textarea></div>${inp('elementos','Elementos (dentes) · ex.: 47 ou 11, 21')}
-    <div style="grid-column:span 4;border:1px solid var(--line);border-radius:12px;padding:10px">
-      <div class="row"><b>Serviços e valores da ficha</b><span class="sp"></span><b id="ostot" style="font-size:16px">R$ 0,00</b></div>
+    <div style="grid-column:span 4;display:flex;align-items:center;gap:10px;background:var(--soft,#f1f5ff);border-radius:12px;padding:10px 12px"><b>💰 Total da ficha</b><span style="color:var(--muted);font-size:12.5px">${ehLab()?'serviços + componentes cobrados':'produtos cobrados'}</span><span class="sp"></span><b id="ostot" style="font-size:18px">R$ 0,00</b></div>
+    <div style="grid-column:span 4;border:1px solid var(--line);border-radius:12px;padding:10px;${!ehLab()&&!prodsServ().length&&!(o.servicos||[]).length?'display:none':''}">
+      <div class="row"><b>Serviços e valores da ficha</b></div>
       <p style="color:var(--muted);font-size:12.5px;margin:4px 0 8px">Aparecem na ficha impressa (Unitário, %, Total e Total Pedido) e já entram na venda ao <b>Finalizar</b>.</p>
       <div style="display:grid;grid-template-columns:1fr 70px 110px 70px 110px 34px;gap:6px;font-size:12px;color:var(--muted);font-weight:600;margin-bottom:4px"><span>Serviço</span><span>Qtd.</span><span>Unitário</span><span>%</span><span>Total</span><span></span></div>
       <div id="osserv"></div><button type="button" class="btn sm" onclick="osServLinha()">+ Serviço</button>
@@ -956,8 +957,9 @@ function formOS(id){
     ${inp('ucla_cliente','UCLA do cliente')}${inp('analogo_cliente','Análogo do cliente')}${inp('parafuso_cliente','Parafuso do cliente')}${inp('secao','Seção')}
     ${inp('ucla_lab','UCLA do laboratório')}${inp('analogo_lab','Análogo do laboratório')}${inp('parafuso_lab','Parafuso do laboratório')}<div></div>
     <div style="grid-column:span 4;margin-top:6px;border:1px solid var(--line);border-radius:12px;padding:10px">
-      <div class="row"><b>Componentes do estoque do laboratório</b><span class="sp"></span>${o.componentes_baixados?'<span class="tag t-ok">Baixa feita no estoque</span>':''}</div>
-      <p style="color:var(--muted);font-size:12.5px;margin:4px 0 8px">Saem do estoque ao <b>Finalizar</b> a ficha. Marque "Cobrar" para incluir na venda da clínica.</p>
+      <div class="row"><b>${ehLab()?'Componentes do estoque do laboratório':'📦 Produtos / componentes do estoque'}</b><span class="sp"></span>${o.componentes_baixados?'<span class="tag t-ok">Baixa feita no estoque</span>':''}</div>
+      <p style="color:var(--muted);font-size:12.5px;margin:4px 0 8px">Saem do estoque ao <b>Finalizar</b> a ficha. Com <b>"Cobrar"</b> marcado, o item entra na venda com o valor mostrado${ehLab()?'':' (é o que você vende para a clínica)'}. Sem "Cobrar", só dá baixa no estoque.</p>
+      <div style="display:grid;grid-template-columns:1fr 70px 100px 80px 100px 34px;gap:6px;font-size:12px;color:var(--muted);font-weight:600;margin-bottom:4px"><span>Produto</span><span>Qtd.</span><span>Unitário</span><span></span><span style="text-align:right">Total</span><span></span></div>
       <div id="oscomp"></div>${o.componentes_baixados?'':'<button type="button" class="btn sm" onclick="osCompLinha()">+ Componente</button>'}
     </div>
     <div style="grid-column:span 4;font-weight:700;margin-top:4px">Provas (idas e voltas)</div>
@@ -966,11 +968,12 @@ function formOS(id){
     <div style="grid-column:span 4"><label>Observações</label><textarea name="obs" rows="3" style="width:100%">${esc(o.obs||'')}</textarea></div>
     <div style="grid-column:span 4;display:flex;gap:18px;flex-wrap:wrap">${chk('urgente','⚡ Urgente')}${chk('remoldagem','Remoldagem')}${chk('suspenso','Suspenso')}</div>
   </form>
-  <div class="row" style="margin-top:12px">${id&&dono()?`<button class="btn d" onclick="fechar();confirmar('Excluir a ficha ${esc(o.numero)}?',()=>delOS('${id}'))">Excluir</button>`:''}${id?`<button class="btn" onclick="salvarOS('${id}',true)">🖨️ Salvar e imprimir</button>`:''}${id&&o.venda_id&&dono()?`<button class="btn" onclick="fechar();reabrirOS('${id}')">↩ Reabrir ficha</button>`:''}<span class="sp"></span><button class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bos2" onclick="salvarOS('${id||''}')">Salvar</button></div>`);
+  <div class="row" style="margin-top:12px">${id&&dono()?`<button class="btn d" onclick="fechar();confirmar('Excluir a ficha ${esc(o.numero)}?',()=>delOS('${id}'))">Excluir</button>`:''}${id?`<button class="btn" onclick="salvarOS('${id}',true)">🖨️ Salvar e imprimir</button>`:''}${id&&o.venda_id&&dono()?`<button class="btn" onclick="fechar();reabrirOS('${id}')">↩ Reabrir ficha</button>`:''}<span class="sp"></span><button class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bos2" onclick="salvarOS('${id||''}')">Salvar</button>${!o.venda_id&&o.status!=='entregue'&&o.status!=='cancelado'?`<button class="btn ok" style="background:var(--ok);color:#fff;border-color:var(--ok)" onclick="salvarOS('${id||''}',false,true)">✓ Salvar e finalizar venda</button>`:''}</div>`);
   $('#mbox').style.width='min(980px,100%)';{const nf=$('#fos [name=numero]');nf.autocomplete='off';if(!id){nf.placeholder='Gerando número…';proxNumOS().then(n=>{if(n&&!nf.value){nf.value=n;nf.dataset.sug=n;nf.title='Número gerado automaticamente. Não precisa digitar.'}})}}
   S._osCompTrava=!!o.componentes_baixados;(o.componentes||[]).forEach(c=>osCompLinha(c));
   (o.servicos&&o.servicos.length?o.servicos:[{}]).forEach(x=>osServLinha(x));osServTot();
 }
+const ehLab=()=>/laborat/i.test((S.empresa&&S.empresa.nome)||'');
 const prodsServ=()=>S.produtos.filter(p=>servico(p)&&p.ativo!==false);
 const osServVal=l=>(+l.qtd||0)*(+l.preco||0)*(1-(+l.pct||0)/100);
 function osServLinha(x={}){
@@ -982,27 +985,32 @@ function osServLinha(x={}){
 }
 function osServPreco(sel){const l=sel.parentNode,o=sel.selectedOptions[0];if(o&&o.dataset.pr!=null&&o.value)l.querySelector('.osu').value=(+o.dataset.pr).toFixed(2);osServTot()}
 function osServLer(){return [...document.querySelectorAll('#osserv .ossl')].map(l=>{const s=l.querySelector('.osp'),o=s.selectedOptions[0];return {produto_id:s.value,nome:o?o.textContent:'',qtd:+l.querySelector('.osq').value||0,preco:+l.querySelector('.osu').value||0,pct:+l.querySelector('.osd').value||0}}).filter(x=>x.produto_id&&x.qtd>0)}
-function osServTot(){let t=0;document.querySelectorAll('#osserv .ossl').forEach(l=>{const v=osServVal({qtd:l.querySelector('.osq').value,preco:l.querySelector('.osu').value,pct:l.querySelector('.osd').value});t+=v;l.querySelector('.ost').textContent=R(v)});const e=$('#ostot');if(e)e.textContent=R(t)}
+function osServTot(){let t=0;document.querySelectorAll('#osserv .ossl').forEach(l=>{const v=osServVal({qtd:l.querySelector('.osq').value,preco:l.querySelector('.osu').value,pct:l.querySelector('.osd').value});t+=v;l.querySelector('.ost').textContent=R(v)});
+  document.querySelectorAll('#oscomp .oscl').forEach(l=>{const cb=l.querySelector('.occ').checked,v=cb?(+l.querySelector('.ocq').value||0)*(+l.querySelector('.ocu').value||0):0;if(l.querySelector('.ocp').value)t+=v;l.querySelector('.oct').textContent=cb?R(v):'só baixa';l.querySelector('.oct').style.color=cb?'':'var(--muted)';l.querySelector('.ocu').style.opacity=cb?1:.45});
+  const e=$('#ostot');if(e)e.textContent=R(t)}
 const prodsEst=()=>S.produtos.filter(p=>!servico(p)&&p.ativo!==false);
 function osCompLinha(c={}){
-  const d=document.createElement('div');d.className='oscl';d.style.cssText='display:grid;grid-template-columns:1fr 80px 90px 34px;gap:6px;align-items:center;margin-bottom:6px';
-  const dis=S._osCompTrava?'disabled':'';
-  d.innerHTML=`<select class="ocp" ${dis}><option value="">Escolha o produto</option>${prodsEst().map(p=>`<option value="${p.id}" ${p.id===c.produto_id?'selected':''}>${esc(p.nome)}${p.descricao?' '+esc(p.descricao):''} (est. ${N(p.estoque)})</option>`).join('')}</select><input class="ocq" type="number" min="1" step="any" value="${c.qtd||1}" ${dis}><label style="display:flex;gap:4px;align-items:center;font-size:12.5px"><input type="checkbox" class="occ" style="width:16px;height:16px" ${c.cobrar?'checked':''} ${dis}> Cobrar</label>${S._osCompTrava?'':'<button type="button" class="btn sm d" onclick="this.parentNode.remove()">×</button>'}`;
+  const d=document.createElement('div');d.className='oscl';d.style.cssText='display:grid;grid-template-columns:1fr 70px 100px 80px 100px 34px;gap:6px;align-items:center;margin-bottom:6px';
+  const dis=S._osCompTrava?'disabled':'';const pp=c.produto_id&&P(c.produto_id);const pr=c.preco!=null?c.preco:(pp?+pp.preco||0:'');
+  d.innerHTML=`<select class="ocp" ${dis} onchange="osCompProd(this)"><option value="">Escolha o produto</option>${prodsEst().map(p=>`<option value="${p.id}" data-pr="${+p.preco||0}" ${p.id===c.produto_id?'selected':''}>${esc(p.nome)}${p.descricao?' '+esc(p.descricao):''} (est. ${N(p.estoque)})</option>`).join('')}</select><input class="ocq" type="number" min="1" step="any" value="${c.qtd||1}" ${dis} oninput="osServTot()"><input class="ocu" type="number" min="0" step="0.01" value="${pr===''?'':(+pr).toFixed(2)}" placeholder="0,00" ${dis} oninput="osServTot()"><label style="display:flex;gap:4px;align-items:center;font-size:12.5px"><input type="checkbox" class="occ" style="width:16px;height:16px" ${c.cobrar||(!c.produto_id&&!ehLab())?'checked':''} ${dis} onchange="osServTot()"> Cobrar</label><b class="oct" style="text-align:right;white-space:nowrap">R$ 0,00</b>${S._osCompTrava?'<span></span>':'<button type="button" class="btn sm d" onclick="this.parentNode.remove();osServTot()">×</button>'}`;
   $('#oscomp').appendChild(d);
-  if(!prodsEst().length&&!c.produto_id)$('#oscomp').insertAdjacentHTML('beforeend','<p style="color:var(--warn);font-size:12.5px">Cadastre os componentes (UCLA, análogo, parafuso…) em Produtos, com categoria que não seja "Serviço", e lance a entrada no estoque.</p>');
+  if(!prodsEst().length&&!c.produto_id)$('#oscomp').insertAdjacentHTML('beforeend','<p style="color:var(--warn);font-size:12.5px">Cadastre os produtos (implante, UCLA, análogo, parafuso…) em Produtos, com categoria que não seja "Serviço", e lance a entrada no estoque.</p>');
+  osServTot();
 }
+function osCompProd(sel){const l=sel.parentNode,o=sel.selectedOptions[0];if(o&&o.value)l.querySelector('.ocu').value=(+o.dataset.pr||0).toFixed(2);osServTot()}
 async function proxNumOS(){try{const E=S.empresa.id;
   const a=await q(sb.from('ordens_servico').select('seq').eq('empresa_id',E).not('seq','is',null).order('seq',{ascending:false}).limit(1));
   return String(((a[0]&&+a[0].seq)||0)+1).padStart(6,'0')+'-1'}catch(e){return ''}}
-function salvarOS(id,imp){
+function salvarOS(id,imp,fin){
   const fm=$('#fos'),d={};
-  if(!S._osCompTrava)d.componentes=[...document.querySelectorAll('#oscomp .oscl')].map(l=>({produto_id:l.querySelector('.ocp').value,qtd:+l.querySelector('.ocq').value||0,cobrar:l.querySelector('.occ').checked})).filter(c=>c.produto_id&&c.qtd>0);
+  if(!S._osCompTrava)d.componentes=[...document.querySelectorAll('#oscomp .oscl')].map(l=>({produto_id:l.querySelector('.ocp').value,qtd:+l.querySelector('.ocq').value||0,preco:l.querySelector('.ocu').value===''?null:+l.querySelector('.ocu').value,cobrar:l.querySelector('.occ').checked})).filter(c=>c.produto_id&&c.qtd>0);
   d.servicos=osServLer();
   [...fm.elements].forEach(e=>{if(!e.name||e.closest('#oscomp')||e.closest('#osserv'))return;if(e.type==='checkbox')d[e.name]=e.checked;else if(e.tagName==='SELECT'&&(e.name==='antagonista'||e.name==='registro'))d[e.name]=e.value===''?null:e.value==='true';else if(e.type==='number')d[e.name]=e.value===''?null:+e.value;else d[e.name]=e.value.trim()||null});
   busy($('#bos2'),async()=>{
+    if(fin&&!(d.servicos||[]).length&&!(d.componentes||[]).some(c=>c.cobrar))return toast('Inclua ao menos um serviço ou um produto com "Cobrar" marcado para finalizar.',1);
     if(id){await q(sb.from('ordens_servico').update(d).eq('id',id));const ox=(S._os||[]).find(x=>x.id===id);if(ox)Object.assign(ox,d)}
-    else{const r=await q(sb.from('ordens_servico').insert({...d,empresa_id:S.empresa.id}).select('numero'));toast('Ficha '+(r[0]&&r[0].numero||'')+' criada')}
-    fechar();render();if(imp&&id)imprimirOS(id);
+    else{const r=await q(sb.from('ordens_servico').insert({...d,empresa_id:S.empresa.id}).select('*'));if(r[0]){id=r[0].id;(S._os=S._os||[]).push(r[0])}toast('Ficha '+(r[0]&&r[0].numero||'')+' criada')}
+    fechar();if(fin&&id)return finalizarOS(id);render();if(imp&&id)imprimirOS(id);
   });
 }
 function reabrirOS(id){
@@ -1022,8 +1030,9 @@ function finalizarOS(id){
   const o=(S._os||[]).find(x=>x.id===id);if(!o)return;
   S.cart=[];S.pdvF={...S.pdvF,cli:o.cliente_id||'',pac:o.paciente||'',fic:o.numero||'',ent:o.data_entrada||'',os:o.id,pg:o.cliente_id?'Fiado':S.pdvF.pg};
   (o.servicos||[]).forEach(x=>{const p=P(x.produto_id);S.cart.push({produto_id:x.produto_id,nome:(p&&p.nome)||x.nome,qtd:+x.qtd,preco:+(((+x.preco)*(1-(+x.pct||0)/100)).toFixed(2))})});
-  if(!o.componentes_baixados)(o.componentes||[]).filter(c=>c.cobrar).forEach(c=>{const p=P(c.produto_id);if(p)S.cart.push({produto_id:p.id,nome:p.nome,qtd:+c.qtd,preco:p.preco})});
-  go('pdv');toast('Escolha os serviços da ficha '+o.numero+' e finalize a venda');
+  if(!o.componentes_baixados)(o.componentes||[]).filter(c=>c.cobrar).forEach(c=>{const p=P(c.produto_id);if(p)S.cart.push({produto_id:p.id,nome:p.nome,qtd:+c.qtd,preco:c.preco!=null?+c.preco:+p.preco})});
+  if(!S.cart.length)return toast('Esta ficha não tem nada para cobrar. Abra a ficha e inclua um serviço ou marque "Cobrar" no produto.',1);
+  go('pdv');toast('Ficha '+o.numero+' no caixa: confira o valor, a forma de pagamento e clique em Finalizar venda');
 }
 const OS_RODAPE='FECHAMENTO DAS NOTAS DE 01 A 30, COM ACERTO ATÉ DIA 10 DO MÊS SUBSEQUENTE.';
 const OS_ARC=[[18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28],[48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38]];
