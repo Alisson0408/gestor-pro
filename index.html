@@ -924,7 +924,7 @@ VIEWS.os=async()=>{
   const b=F.b.toLowerCase();
   const l=ls.filter(filt[F.f]).filter(o=>!b||[o.numero,o.paciente,o.dentista,o.trabalho,nomeCli(o.cliente_id)].join(' ').toLowerCase().includes(b)).sort((x,y)=>F.f==='entregues'||F.f==='todas'?0:(x.urgente===y.urgente?(x.prevista||'9')<(y.prevista||'9')?-1:1:x.urgente?-1:1));
   const cnt=k=>ls.filter(filt[k]).length;
-  return `<div class="row"><div><h1>Ordens de Serviço</h1><p class="sub">Fichas dos trabalhos: chegada, produção, provas, prazos e entrega.</p></div><span class="sp"></span><button class="btn p" onclick="formOS()">+ Nova ficha</button></div>
+  return `<div class="row"><div><h1>Ordens de Serviço</h1><p class="sub">Fichas dos trabalhos: chegada, produção, provas, prazos e entrega.</p></div><span class="sp"></span>${dono()?'<button class="btn" onclick="formRodapeOS()">✏️ Texto do extrato</button> ':''}<button class="btn p" onclick="formOS()">+ Nova ficha</button></div>
   <div class="grid k4"><div class="card kpi"><div class="l">Em aberto</div><div class="v">${ab.length}</div></div><div class="card kpi"><div class="l">Atrasadas</div><div class="v" style="color:var(--bad)">${cnt('atrasadas')}</div></div><div class="card kpi"><div class="l">Vencem hoje</div><div class="v" style="color:var(--warn)">${cnt('hoje')}</div></div><div class="card kpi"><div class="l">Em prova</div><div class="v">${cnt('prova')}</div></div></div>
   <div class="card tw" style="margin-top:16px"><div class="row" style="margin-bottom:12px;flex-wrap:wrap">${[['abertas','Em aberto'],['atrasadas','🔴 Atrasadas'],['hoje','Hoje'],['prova','Em prova'],['urgentes','⚡ Urgentes'],['prontas','Prontas'],['entregues','Entregues'],['todas','Todas']].map(([k,n])=>`<button class="btn sm ${F.f===k?'p':''}" onclick="S.osF.f='${k}';render()">${n} (${cnt(k)})</button>`).join('')}<span class="sp"></span><input id="bos" style="max-width:280px" placeholder="🔎 Ficha, paciente, dentista..." value="${esc(F.b)}" oninput="S.osF.b=this.value;S._refocus='bos';render()"></div>
   <table><tr><th>Ficha</th><th>Clínica / Dentista</th><th>Paciente</th><th>Trabalho</th><th>Entrada</th><th>Prevista</th><th>Situação</th><th></th></tr>
@@ -941,7 +941,7 @@ function formOS(id){
   modal(`<h3>🦷 ${id?'Ficha '+esc(o.numero):'Nova ficha'} ${id?`<span class="tag ${OS_ST[o.status][1]}">${OS_ST[o.status][0]}</span>`:''}</h3>
   <form id="fos" class="f" style="grid-template-columns:repeat(4,1fr);max-height:68vh;overflow:auto;padding-right:4px">
     ${inp('numero','Nº da ficha',undefined,'')}${inp('data_entrada','Data de entrada','date')}${inp('prevista','Prevista (entrega)','date')}${inp('data_lab','Data laboratório','date')}
-    <div style="grid-column:span 2"><label>Clínica / Consultório (cliente)</label><select name="cliente_id">${optsList(S.clientes,o.cliente_id||'','Escolha a clínica')}</select></div>${inp('dentista','Cirurgião-dentista',undefined,'style="grid-column:span 2"')}
+    <div style="grid-column:span 2"><label>Clínica / Consultório (cliente)</label><select name="cliente_id" onchange="const c=S.clientes.find(x=>x.id===this.value),f=$('#fos [name=codigo]');if(f&&c&&c.codigo)f.value=c.codigo">${optsList(S.clientes,o.cliente_id||'','Escolha a clínica')}</select></div>${inp('dentista','Cirurgião-dentista')}<div><label>Cód. do dentista</label><input name="codigo" value="${esc(o.codigo||((S.clientes.find(x=>x.id===o.cliente_id)||{}).codigo)||'')}" placeholder="vem do cadastro"></div>
     ${inp('paciente','Paciente',undefined,'style="grid-column:span 2"')}<div><label>Sexo</label><select name="sexo"><option value="">—</option>${['Fem.','Mas.'].map(x=>`<option ${o.sexo===x?'selected':''}>${x}</option>`).join('')}</select></div><div><label>Tipo</label><select name="tipo">${['Pedido','Retorno','Remoldagem','Conserto'].map(x=>`<option ${o.tipo===x?'selected':''}>${x}</option>`).join('')}</select></div>
     ${inp('cor','Cor do dente')}${inp('escala','Escala')}${inp('pastilhas','Pastilhas')}${inp('substrato','Substrato')}
     <div style="grid-column:span 3"><label>Trabalho a ser executado</label><textarea name="trabalho" rows="2" style="width:100%">${esc(o.trabalho||'')}</textarea></div>${inp('elementos','Elementos (dentes) · ex.: 47 ou 11, 21')}
@@ -953,7 +953,6 @@ function formOS(id){
       <div id="osserv"></div><button type="button" class="btn sm" onclick="osServLinha()">+ Serviço</button>
     </div>
     ${inp('moldeira_parcial','Moldeira parcial (qtd)','number')}${inp('moldeira_total','Moldeira total (qtd)','number')}${sn('antagonista','Antagonista')}${sn('registro','Registro')}
-    <div style="grid-column:span 4;display:grid;grid-template-columns:repeat(5,1fr);gap:10px">${inp('modelo','Modelo')}${inp('mat_fornecido','Mat. fornecido')}${inp('mat_devolvido','Mat. devolvido')}${inp('caixa','Caixa')}${inp('codigo','Cód.')}</div>
     <div style="grid-column:span 4;font-weight:700;margin-top:4px">Componentes</div>
     ${inp('ucla_cliente','UCLA do cliente')}${inp('analogo_cliente','Análogo do cliente')}${inp('parafuso_cliente','Parafuso do cliente')}${inp('secao','Seção')}
     ${inp('ucla_lab','UCLA do laboratório')}${inp('analogo_lab','Análogo do laboratório')}${inp('parafuso_lab','Parafuso do laboratório')}<div></div>
@@ -1035,10 +1034,15 @@ function finalizarOS(id){
   if(!S.cart.length)return toast('Esta ficha não tem nada para cobrar. Abra a ficha e inclua um serviço ou marque "Cobrar" no produto.',1);
   go('pdv');toast('Ficha '+o.numero+' no caixa: confira o valor, a forma de pagamento e clique em Finalizar venda');
 }
+function formRodapeOS(){
+  modal(`<h3>✏️ Texto do rodapé do extrato</h3><p class="sub" style="margin:4px 0 12px">Sai no final de toda ficha impressa enviada ao dentista. Ex.: prazos de fechamento e de pagamento. Use até 2 ou 3 linhas.</p>
+  <form id="frod" class="f" style="grid-template-columns:1fr"><textarea name="t" rows="3" maxlength="400" style="width:100%">${esc(S.empresa.os_rodape||'')}</textarea>
+  <div class="row"><span class="sp"></span><button type="button" class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="brod">Salvar</button></div></form>`);
+  $('#frod').onsubmit=e=>{e.preventDefault();const t=e.target.t.value;busy($('#brod'),async()=>{await rpc('salvar_rodape_os',{p_empresa:S.empresa.id,p_texto:t});S.empresa.os_rodape=t.trim()||null;fechar();toast('Texto do extrato salvo')})}}
 const OS_RODAPE='FECHAMENTO DAS NOTAS DE 01 A 30, COM ACERTO ATÉ DIA 10 DO MÊS SUBSEQUENTE.';
 const OS_ARC=[[18,17,16,15,14,13,12,11,21,22,23,24,25,26,27,28],[48,47,46,45,44,43,42,41,31,32,33,34,35,36,37,38]];
 async function imprimirOS(id){
-  const o=(S._os||[]).find(x=>x.id===id);if(!o)return;const emp=await empDados();const c=S.clientes.find(x=>x.id===o.cliente_id)||{};
+  const o=(S._os||[]).find(x=>x.id===id);if(!o)return;let rod=S.empresa.os_rodape;try{const r=(await q(sb.from('empresas').select('os_rodape').eq('id',S.empresa.id)))[0];if(r&&'os_rodape' in r)rod=S.empresa.os_rodape=r.os_rodape}catch(e){}const emp=await empDados();const c=S.clientes.find(x=>x.id===o.cliente_id)||{};
   let v=null;if(o.venda_id){try{v=normVenda((await q(sb.from('vendas').select('*,venda_itens(*)').eq('id',o.venda_id)))[0])}catch(e){}}
   const els=String(o.elementos||'').split(/[^0-9]+/).filter(Boolean).map(Number);
   const dt=x=>x?new Date(String(x).length===10?x+'T12:00':x).toLocaleDateString('pt-BR'):'';
@@ -1078,10 +1082,10 @@ async function imprimirOS(id){
    <table class="xt-tb"><tr><th style="width:38px">Qtd.</th><th style="width:48px">Dentes</th><th style="width:70px">Elem.</th><th>Descrição (Serviços)</th><th class="n" style="width:78px">Unitário</th><th class="n" style="width:38px">%</th><th class="n" style="width:78px">Total</th></tr>
    ${its.map((i,k)=>`<tr><td>${N(i.q)}</td><td>${k?'':ncol}</td><td>${k?'':esc(nd)}</td><td>${esc(i.d)}</td><td class="n">${i.u==null?'':R(i.u)}</td><td class="n">${i.u==null?'':(+i.p||0).toFixed(2).replace('.',',')}</td><td class="n">${i.t==null?'':R(i.t)}</td></tr>`).join('')}</table>
    <div class="xt-mid"><div></div><div>${tem?`<div class="xt-sub">Subtotal ${R(sub)}${desc?' · Desconto '+R(desc):''}</div>`:''}<div class="xt-tot">Total Pedido: ${tot==null?'—':R(tot)}</div><div class="xt-sig">Recebemos o(s) trabalho(s) acima</div></div></div>
-   <div class="xt-inf"><div><p>Escala: ${esc(o.escala||'')}</p><p>Cor: ${esc(o.cor||'')}</p><p>Antagonista: ${sn(o.antagonista)}</p><p>Modelo: ${esc(o.modelo||'')}</p><p>Mat. Forne: ${esc(o.mat_fornecido||'')}</p><p>Mat. Devol.: ${esc(o.mat_devolvido||'')}</p><p>Caixa: ${esc(o.caixa||'')}</p><p>Cod: ${esc(o.codigo||'')}</p></div>
+   <div class="xt-inf"><div><p>Escala: ${esc(o.escala||'')}</p><p>Cor: ${esc(o.cor||'')}</p><p>Antagonista: ${sn(o.antagonista)}</p><p>Cod: ${esc(o.codigo||c.codigo||'')}</p><p>Elemento(s): ${esc(nd||'')}</p></div>
     <div>${arc}<div class="xt-leg">C - Coroa &nbsp;I - Implante &nbsp;L - Laminado &nbsp;O - Onlay-Inlay &nbsp;P - Pôntico &nbsp;A - Ausente</div></div></div>
    <div class="xt-obs">OBS:<br>${esc(o.obs||o.trabalho||'')}</div>
-   ${/laborat/i.test(emp.nome||S.empresa.nome||'')?`<div class="xt-rod">${OS_RODAPE}</div>`:''}
+   ${rod?`<div class="xt-rod" style="white-space:pre-line">${esc(rod)}</div>`:''}
   </div>`;
   imprimirDoc(`<div style="zoom:1.36;width:770px">${doc}</div>`,'Extrato '+o.numero,'A4 landscape','9mm');
 }
@@ -1262,7 +1266,7 @@ function imprimirEtiquetas(){
 
 // ---- Clientes e Fornecedores
 const CAD={
-  clientes:{tit:'Clientes',um:'cliente',sub:'Cadastre seus clientes para vender fiado, ver o histórico de compras e chamar no WhatsApp.',campos:[['nome','Nome / Razão social *',2],['documento','CPF / CNPJ'],['telefone','Telefone / WhatsApp'],['email','E-mail'],['endereco','Endereço',2],['obs','Observações',2]]},
+  clientes:{tit:'Clientes',um:'cliente',sub:'Cadastre seus clientes para vender fiado, ver o histórico de compras e chamar no WhatsApp.',campos:[['nome','Nome / Razão social *',2],['codigo','Código do dentista / conveniado (sai no extrato)'],['documento','CPF / CNPJ'],['telefone','Telefone / WhatsApp'],['email','E-mail'],['endereco','Endereço',2],['obs','Observações',2]]},
   fornecedores:{tit:'Fornecedores',um:'fornecedor',sub:'Cadastre de quem você compra. As entradas de mercadoria ficam ligadas ao fornecedor.',campos:[['nome','Nome / Razão social *',2],['documento','CNPJ / CPF'],['contato','Pessoa de contato'],['telefone','Telefone / WhatsApp'],['email','E-mail'],['endereco','Endereço',2],['obs','Observações',2]]}
 };
 const waLink=t=>{const ps=String(t||'').split(/[\/;,]/).map(x=>x.replace(/\D/g,'')).filter(x=>x.length>=10);const n=ps.find(x=>(x.length===11&&x[2]==='9')||x.length===13)||ps[0];return n?`https://wa.me/${n.length<=11?'55'+n:n}`:''};
