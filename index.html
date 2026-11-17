@@ -933,8 +933,16 @@ VIEWS.os=async()=>{
 };
 const dataBR=d=>d?d.split('-').reverse().join('/'):'—';
 async function osStatus(id,st){try{await q(sb.from('ordens_servico').update({status:st}).eq('id',id));toast('Situação: '+OS_ST[st][0]);render()}catch(e){erro(e)}}
+// Prazos da ficha: prevista = entrada + 5 dias úteis (sem sábado e domingo); laboratório = 1 dia útil antes
+const OS_DIAS_UTEIS=5;
+const _isoD=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+function somaUteis(iso,n){const d=new Date(iso+'T12:00');const st=n<0?-1:1;let k=Math.abs(n);while(k>0){d.setDate(d.getDate()+st);const w=d.getDay();if(w!==0&&w!==6)k--}return _isoD(d)}
+function osPrazos(force){const f=$('#fos');if(!f)return;const e=f.data_entrada.value;if(!e)return;
+  if(force||!f.prevista.value||f.prevista.dataset.auto){f.prevista.value=somaUteis(e,OS_DIAS_UTEIS);f.prevista.dataset.auto=1}
+  if(force||!f.data_lab.value||f.data_lab.dataset.auto){f.data_lab.value=somaUteis(f.prevista.value,-1);f.data_lab.dataset.auto=1}}
 function formOS(id){
   const o=id?(S._os||[]).find(x=>x.id===id):{data_entrada:today(),tipo:'Pedido',status:'recebido'};
+  if(!id){o.prevista=somaUteis(o.data_entrada,OS_DIAS_UTEIS);o.data_lab=somaUteis(o.prevista,-1)}
   const inp=(k,l,t='text',x='')=>`<div ${x}><label>${l}</label><input name="${k}" type="${t}" value="${esc(o[k]==null?'':o[k])}"></div>`;
   const chk=(k,l)=>`<label style="display:flex;align-items:center;gap:6px;font-weight:600;cursor:pointer"><input type="checkbox" name="${k}" style="width:18px;height:18px" ${o[k]?'checked':''}> ${l}</label>`;
   const sn=(k,l)=>`<div><label>${l}</label><select name="${k}"><option value="">—</option><option value="true" ${o[k]===true?'selected':''}>Sim</option><option value="false" ${o[k]===false?'selected':''}>Não</option></select></div>`;
@@ -971,6 +979,11 @@ function formOS(id){
   <div class="row" style="margin-top:12px">${id&&dono()?`<button class="btn d" onclick="fechar();confirmar('Excluir a ficha ${esc(o.numero)}?',()=>delOS('${id}'))">Excluir</button>`:''}${id?`<button class="btn" onclick="salvarOS('${id}',true)">🖨️ Salvar e imprimir</button>`:''}${id&&o.venda_id&&dono()?`<button class="btn" onclick="fechar();reabrirOS('${id}')">↩ Reabrir ficha</button>`:''}<span class="sp"></span><button class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bos2" onclick="salvarOS('${id||''}')">Salvar</button>${!o.venda_id&&o.status!=='entregue'&&o.status!=='cancelado'?`<button class="btn ok" style="background:var(--ok);color:#fff;border-color:var(--ok)" onclick="salvarOS('${id||''}',false,true)">✓ Salvar e finalizar venda</button>`:''}</div>`);
   $('#mbox').style.width='min(980px,100%)';{const nf=$('#fos [name=numero]');nf.autocomplete='off';if(!id){nf.placeholder='Gerando número…';proxNumOS().then(n=>{if(n&&!nf.value){nf.value=n;nf.dataset.sug=n;nf.title='Número gerado automaticamente. Não precisa digitar.'}})}}
   S._osCompTrava=!!o.componentes_baixados;(o.componentes||[]).forEach(c=>osCompLinha(c));
+  {const f=$('#fos');if(!id){f.prevista.dataset.auto=1;f.data_lab.dataset.auto=1}
+   f.data_entrada.addEventListener('change',()=>osPrazos());
+   f.prevista.addEventListener('change',()=>{delete f.prevista.dataset.auto;if(f.data_lab.dataset.auto&&f.prevista.value)f.data_lab.value=somaUteis(f.prevista.value,-1)});
+   f.data_lab.addEventListener('change',()=>delete f.data_lab.dataset.auto);
+   const cod=f.codigo;if(cod)cod.addEventListener('change',()=>{const v=cod.value.trim().replace(/^0+/,'');if(!v)return;const c=S.clientes.find(x=>(x.codigo||'').replace(/^0+/,'')===v);if(c){f.cliente_id.value=c.id;cod.value=c.codigo;toast('Cliente: '+c.nome)}else toast('Nenhum cliente com o código '+cod.value,1)})}
   (o.servicos&&o.servicos.length?o.servicos:[{}]).forEach(x=>osServLinha(x));osServTot();
 }
 const ehLab=()=>/laborat/i.test((S.empresa&&S.empresa.nome)||'');
