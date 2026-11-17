@@ -968,10 +968,10 @@ function formOS(id){
     ${inp('ucla_cliente','UCLA do cliente')}${inp('analogo_cliente','Análogo do cliente')}${inp('parafuso_cliente','Parafuso do cliente')}${inp('secao','Seção')}
     ${inp('ucla_lab','UCLA do laboratório')}${inp('analogo_lab','Análogo do laboratório')}${inp('parafuso_lab','Parafuso do laboratório')}<div></div>
     <div style="grid-column:span 4;margin-top:6px;border:1px solid var(--line);border-radius:12px;padding:10px">
-      <div class="row"><b>${ehLab()?'Componentes do estoque do laboratório':'📦 Produtos / componentes do estoque'}</b><span class="sp"></span>${o.componentes_baixados?'<span class="tag t-ok">Baixa feita no estoque</span>':''}</div>
+      <div class="row"><b>${ehLab()?'Componentes do estoque do laboratório':'📦 Produtos / componentes do estoque'}</b><span class="sp"></span>${o.componentes_baixados&&o.venda_id?'<span class="tag t-ok">Baixa feita no estoque</span>':''}</div>
       <p style="color:var(--muted);font-size:12.5px;margin:4px 0 8px">Saem do estoque ao <b>Finalizar</b> a ficha. Com <b>"Cobrar"</b> marcado, o item entra na venda com o valor mostrado${ehLab()?'':' (é o que você vende para a clínica)'}. Sem "Cobrar", só dá baixa no estoque.</p>
       <div style="display:grid;grid-template-columns:1fr 70px 100px 80px 100px 34px;gap:6px;font-size:12px;color:var(--muted);font-weight:600;margin-bottom:4px"><span>Produto</span><span>Qtd.</span><span>Unitário</span><span></span><span style="text-align:right">Total</span><span></span></div>
-      <div id="oscomp"></div>${o.componentes_baixados?'':'<button type="button" class="btn sm" onclick="osCompLinha()">+ Componente</button>'}
+      <div id="oscomp"></div>${o.componentes_baixados&&o.venda_id?'':'<button type="button" class="btn sm" onclick="osCompLinha()">+ Componente</button>'}
     </div>
     <div style="grid-column:span 4;font-weight:700;margin-top:4px">Provas (idas e voltas)</div>
     ${inp('rd1','Retorno p/ dentista 1','date')}${inp('rd2','Retorno p/ dentista 2','date')}${inp('rd3','Retorno p/ dentista 3','date')}<div></div>
@@ -981,7 +981,7 @@ function formOS(id){
   </form>
   <div class="row" style="margin-top:12px">${id&&dono()?`<button class="btn d" onclick="fechar();confirmar('Excluir a ficha ${esc(o.numero)}?',()=>delOS('${id}'))">Excluir</button>`:''}${id?`<button class="btn" onclick="salvarOS('${id}',true)">🖨️ Salvar e imprimir</button>`:''}${id&&o.venda_id&&dono()?`<button class="btn" onclick="fechar();reabrirOS('${id}')">↩ Reabrir ficha</button>`:''}<span class="sp"></span><button class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bos2" onclick="salvarOS('${id||''}')">Salvar</button>${!o.venda_id&&o.status!=='entregue'&&o.status!=='cancelado'?`<button class="btn ok" style="background:var(--ok);color:#fff;border-color:var(--ok)" onclick="salvarOS('${id||''}',false,true)">✓ Salvar e finalizar venda</button>`:''}</div>`);
   $('#mbox').style.width='min(980px,100%)';{const nf=$('#fos [name=numero]');nf.autocomplete='off';if(!id){nf.placeholder='Gerando número…';proxNumOS().then(n=>{if(n&&!nf.value){nf.value=n;nf.dataset.sug=n;nf.title='Número gerado automaticamente. Não precisa digitar.'}})}}
-  S._osCompTrava=!!o.componentes_baixados;(o.componentes||[]).forEach(c=>osCompLinha(c));
+  S._osCompTrava=!!(o.componentes_baixados&&o.venda_id);(o.componentes||[]).forEach(c=>osCompLinha(c));
   {const f=$('#fos');if(!id){f.prevista.dataset.auto=1;f.data_lab.dataset.auto=1}
    f.data_entrada.addEventListener('change',()=>osPrazos());
    f.prevista.addEventListener('change',()=>{delete f.prevista.dataset.auto;if(f.data_lab.dataset.auto&&f.prevista.value)f.data_lab.value=somaUteis(f.prevista.value,-1)});
@@ -1046,7 +1046,7 @@ function finalizarOS(id){
   const o=(S._os||[]).find(x=>x.id===id);if(!o)return;
   S.cart=[];S.pdvF={...S.pdvF,cli:o.cliente_id||'',pac:o.paciente||'',fic:o.numero||'',ent:o.data_entrada||'',os:o.id,pg:o.cliente_id?'Fiado':S.pdvF.pg};
   (o.servicos||[]).forEach(x=>{const p=P(x.produto_id);S.cart.push({produto_id:x.produto_id,nome:(p&&p.nome)||x.nome,qtd:+x.qtd,preco:+(((+x.preco)*(1-(+x.pct||0)/100)).toFixed(2))})});
-  if(!o.componentes_baixados)(o.componentes||[]).filter(c=>c.cobrar).forEach(c=>{const p=P(c.produto_id);if(p)S.cart.push({produto_id:p.id,nome:p.nome,qtd:+c.qtd,preco:c.preco!=null?+c.preco:+p.preco})});
+  if(!o.venda_id)(o.componentes||[]).filter(c=>c.cobrar).forEach(c=>{const p=P(c.produto_id);if(p)S.cart.push({produto_id:p.id,nome:p.nome,qtd:+c.qtd,preco:c.preco!=null?+c.preco:+p.preco})});
   if(!S.cart.length)return toast('Esta ficha não tem nada para cobrar. Abra a ficha e inclua um serviço ou marque "Cobrar" no produto.',1);
   go('pdv');toast('Ficha '+o.numero+' no caixa: confira o valor, a forma de pagamento e clique em Finalizar venda');
 }
