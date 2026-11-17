@@ -77,7 +77,10 @@ input:focus,select:focus{border-color:var(--brand)}
 .pc{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;transition:.15s}
 .pc:hover{border-color:var(--brand);transform:translateY(-2px)}
 .pc .n{font-weight:700;font-size:13px;margin-bottom:6px}.pc .p{font-weight:800;color:var(--brand)}.pc .s{font-size:11px;color:var(--muted);margin-top:4px}
-.pc.off{opacity:.4;pointer-events:none}.pc.semest{opacity:.65;border-style:dashed}
+.pc.off{opacity:.4;pointer-events:none}.nfe-hero{display:flex;gap:20px;align-items:center;flex-wrap:wrap;padding:24px;border:2px solid #22c55e;background:linear-gradient(135deg,rgba(34,197,94,.12),rgba(59,130,246,.10))}
+.nfe-btn{background:#22c55e!important;color:#fff!important;border:0!important;font-size:17px;font-weight:800;padding:16px 24px;cursor:pointer;box-shadow:0 8px 24px rgba(34,197,94,.4)}
+@media(max-width:700px){.nfe-btn{width:100%;justify-content:center}}
+.pc.semest{opacity:.65;border-style:dashed}
 .cart .it{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)}
 .cart .it .n{flex:1;font-weight:600;font-size:13px}
 .qty{display:flex;align-items:center;gap:4px}
@@ -366,7 +369,7 @@ function telaBloqueio(){
 async function sair(){await sb.auth.signOut();S.user=S.empresa=null;S.cart=[];S.view='painel';telaLogin()}
 
 // ============ APP ============
-const MENU=[['painel','📊','Painel'],['pdv','🛒','Vender (PDV)'],['os','🦷','Ordens de Serviço'],['produtos','📦','Produtos',1],['precificacao','🧮','Precificação',1],['entrada','⬇️','Entradas',1],['saida','⬆️','Saídas',1],['estoque','🗂️','Estoque'],['etiquetas','🏷️','Etiquetas'],['clientes','👤','Clientes'],['fornecedores','🚚','Fornecedores',1],['financeiro','🏦','Financeiro',1],['historico','🧾','Histórico'],['servexec','📑','Serviços executados',1],['equipe','👥','Equipe',1],['manual','📘','Manual'],['conta','💳','Minha conta']];
+const MENU=[['painel','📊','Painel'],['pdv','🛒','Vender (PDV)'],['nfe','📄','Nota fiscal (NF-e)',1],['os','🦷','Ordens de Serviço'],['produtos','📦','Produtos',1],['precificacao','🧮','Precificação',1],['entrada','⬇️','Entradas',1],['saida','⬆️','Saídas',1],['estoque','🗂️','Estoque'],['etiquetas','🏷️','Etiquetas'],['clientes','👤','Clientes'],['fornecedores','🚚','Fornecedores',1],['financeiro','🏦','Financeiro',1],['historico','🧾','Histórico'],['servexec','📑','Serviços executados',1],['equipe','👥','Equipe',1],['manual','📘','Manual'],['conta','💳','Minha conta']];
 function montarApp(){
   const itens=S.empresa&&ativa(S.empresa)?MENU.filter(m=>(!m[3]||dono())&&(m[0]!=='os'||S.empresa.os_ativo)).map(m=>m[0]==='financeiro'&&!MULTI()?['financeiro','💵','Caixa',1]:m):[];
   if(S.admin)itens.push(['admin','🛡️','Admin (clientes)'+(S.avisosN?' 🔔'+S.avisosN:'')]);
@@ -415,7 +418,7 @@ VIEWS.painel=()=>{
   const tp={};mes.forEach(v=>v.itens.forEach(i=>{tp[i.nome]=(tp[i.nome]||0)+i.qtd*i.preco}));
   const top=Object.entries(tp).sort((a,b)=>b[1]-a[1]).slice(0,5);const tmx=top[0]?top[0][1]:1;
   const fatMes=mes.reduce((s,v)=>s+v.total,0);
-  return `<div class="row"><div><h1>Painel</h1><p class="sub">${new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'})}</p></div><span class="sp"></span><button class="btn sm" onclick="atualizar(this)">↻ Atualizar</button></div>
+  return `<div class="row"><div><h1>Painel</h1><p class="sub">${new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'})}</p></div><span class="sp"></span>${dono()?'<button class="btn sm p" onclick="go(\'nfe\')">📄 Lançar nota fiscal</button> ':''}<button class="btn sm" onclick="atualizar(this)">↻ Atualizar</button></div>
   ${baixos.length?`<div class="alerta-rep" onclick="S.fEst='baixo';go('estoque')"><b>🔴 ${baixos.length} produto(s) precisam de reposição</b><span>${baixos.filter(p=>p.estoque<=0).length} zerado(s) · ${CONFIG.ALERTA_ESTOQUE||10} unidades ou menos ficam em vermelho. Toque para ver.</span></div>`:''}
   <div class="grid k4">
     <div class="card kpi"><div class="l">Vendas hoje</div><div class="v">${R(hoje.reduce((s,v)=>s+v.total,0))}</div><div class="h">${hoje.length} venda(s)${dono()?' · lucro '+R(lucroDe(hoje)):''}</div></div>
@@ -552,6 +555,17 @@ function delProd(id){fechar();confirmar('Excluir este produto? O histórico de v
 const tipoTag={entrada:['Entrada','t-ok'],saida:['Saída','t-bad'],venda:['Venda','t-blue']};
 function tabMov(l){return l.length?`<table><tr><th>Data</th><th>Tipo</th><th>Produto</th><th class="num">Qtd</th><th class="num">Valor unit.</th><th>Obs.</th></tr>${l.map(m=>{const t=tipoTag[m.tipo];const nome=m.produtos?m.produtos.nome:(P(m.produto_id)||{}).nome;return `<tr><td>${D(m.data)}</td><td><span class="tag ${t[1]}">${t[0]}</span></td><td>${nome?esc(nome):'<i>excluído</i>'}</td><td class="num">${m.tipo==='entrada'?'+':'−'}${N(m.qtd)}</td><td class="num">${R(m.valor)}</td><td style="color:var(--muted)">${esc(m.obs||'')}${m.fornecedor_id&&nomeForn(m.fornecedor_id)?' · 🚚 '+esc(nomeForn(m.fornecedor_id)):''}</td></tr>`}).join('')}</table>`:'<div class="empty">Nada registrado ainda</div>'}
 const ultMovs=tipo=>q(sb.from('movimentos').select('*,produtos(nome)').eq('empresa_id',S.empresa.id).eq('tipo',tipo).order('data',{ascending:false}).limit(15));
+VIEWS.nfe=async()=>{
+  let ult=[];try{ult=await q(sb.from('movimentos').select('obs,data,fornecedor_id,qtd,valor').eq('empresa_id',S.empresa.id).eq('tipo','entrada').ilike('obs','NF-e%').order('data',{ascending:false}).limit(300))}catch(e){}
+  const g={};ult.forEach(m=>{const k=(m.obs||'').split(' · ')[0];if(!g[k])g[k]={nf:k,data:m.data,forn:m.fornecedor_id,itens:0,total:0};g[k].itens++;g[k].total+=(+m.qtd||0)*(+m.valor||0)});
+  const notas=Object.values(g).slice(0,20);
+  return `<h1>📄 Nota fiscal (NF-e)</h1><p class="sub">Dê entrada nas compras com nota: fornecedor, produtos, custos e parcelas a pagar entram sozinhos.</p>
+  <div class="card nfe-hero"><div style="font-size:44px;line-height:1">📥</div>
+   <div style="flex:1;min-width:240px"><h2 style="margin:0 0 6px;font-size:22px">Importar nota fiscal de compra</h2>
+    <ol style="margin:0;padding-left:18px;line-height:1.7;color:var(--muted)"><li>Baixe o arquivo <b>XML</b> da nota (vem no e-mail do fornecedor ou no portal dele).</li><li>Toque no botão verde e escolha o arquivo.</li><li>Confira os itens na tela e clique em <b>Confirmar</b>.</li></ol></div>
+   <label class="btn nfe-btn">📄 Escolher XML da nota<input type="file" accept=".xml,text/xml,application/xml" style="display:none" onchange="abrirXML(this)"></label></div>
+  <div class="card" style="margin-top:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap"><div style="flex:1;min-width:220px"><b>🧾 Comprou sem nota fiscal?</b><div style="color:var(--muted);font-size:13px">Lance a entrada manualmente: produto, quantidade e custo.</div></div><button class="btn" onclick="go('entrada')">⬇️ Lançar entrada sem nota</button></div>
+  <div class="card tw" style="margin-top:14px"><h3>Notas já lançadas</h3>${notas.length?`<table><tr><th>Data</th><th>Nota</th><th>Fornecedor</th><th class="num">Itens</th><th class="num">Valor</th></tr>${notas.map(n=>`<tr><td>${D(n.data)}</td><td><b>${esc(n.nf)}</b></td><td>${esc(nomeForn(n.forn)||'—')}</td><td class="num">${n.itens}</td><td class="num">${R(n.total)}</td></tr>`).join('')}</table>`:'<div class="empty">Nenhuma nota importada ainda</div>'}</div>`};
 VIEWS.entrada=async()=>{const ult=await ultMovs('entrada');return `<h1>Entrada de mercadoria</h1><p class="sub">Registre compras e reposições. O custo médio é recalculado automaticamente.</p>
   <div class="card" style="margin-bottom:16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap"><div style="flex:1;min-width:220px"><b>📄 Comprou com nota fiscal?</b><div style="color:var(--muted);font-size:13px;margin-top:2px">Importe o XML da NF-e: fornecedor, itens, custos e parcelas entram sozinhos.</div></div><label class="btn p" style="cursor:pointer">Importar XML da NF-e<input type="file" accept=".xml,text/xml,application/xml" style="display:none" onchange="abrirXML(this)"></label></div>
   <div class="card"><h3 style="margin-bottom:10px">Compra sem nota / lançamento manual</h3><form id="fe" class="f" onsubmit="event.preventDefault();lancar(this,'entrada')">
