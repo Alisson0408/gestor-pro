@@ -77,7 +77,7 @@ input:focus,select:focus{border-color:var(--brand)}
 .pc{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;transition:.15s}
 .pc:hover{border-color:var(--brand);transform:translateY(-2px)}
 .pc .n{font-weight:700;font-size:13px;margin-bottom:6px}.pc .p{font-weight:800;color:var(--brand)}.pc .s{font-size:11px;color:var(--muted);margin-top:4px}
-.pc.off{opacity:.4;pointer-events:none}
+.pc.off{opacity:.4;pointer-events:none}.pc.semest{opacity:.65;border-style:dashed}
 .cart .it{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)}
 .cart .it .n{flex:1;font-weight:600;font-size:13px}
 .qty{display:flex;align-items:center;gap:4px}
@@ -394,8 +394,9 @@ function banner(){
 }
 const lim=p=>p.minimo>0?p.minimo:(+CONFIG.ALERTA_ESTOQUE||10);
 const servico=p=>/^servi[cç]o/i.test(String(p.categoria||'').trim()); // serviços (próteses etc.) não controlam estoque
+const semEst=()=>!!(S.empresa&&S.empresa.vender_sem_estoque);
 const repor=p=>!servico(p)&&p.ativo!==false&&p.estoque<=lim(p);
-const status=p=>servico(p)?['Serviço','t-ok']:p.estoque<=0?['Zerado','t-bad']:repor(p)?['Repor','t-bad']:['OK','t-ok'];
+const status=p=>servico(p)?['Serviço','t-ok']:p.estoque<0?['Negativo','t-bad']:p.estoque<=0?['Zerado','t-bad']:repor(p)?['Repor','t-bad']:['OK','t-ok'];
 function badgeEstoque(){const b=document.querySelector('#nav button[data-v=estoque]');if(!b)return;let i=b.querySelector('.bdg');const n=S.produtos.filter(repor).length;if(!n){if(i)i.remove();return}if(!i){i=document.createElement('span');i.className='bdg';b.appendChild(i)}i.textContent=n}
 function copiarReposicao(){const l=S.produtos.filter(repor).sort((a,b)=>a.estoque-b.estoque);const t=`*Lista de reposição — ${S.empresa.nome}*\n${new Date().toLocaleDateString('pt-BR')}\n\n${l.map(p=>`• ${p.nome}${p.descricao?' '+p.descricao:''} — tem ${N(p.estoque)}, comprar ${N(Math.max(lim(p)*2-p.estoque,1))} ${p.unidade}`).join('\n')}`;navigator.clipboard.writeText(t).then(()=>toast('Lista copiada! Cole no WhatsApp do fornecedor.'),()=>toast('Não foi possível copiar',1))}
 const opts=()=>S.produtos.filter(p=>!servico(p)).map(p=>`<option value="${p.id}">${esc(p.nome)} — estoque: ${N(p.estoque)}</option>`).join('');
@@ -451,7 +452,7 @@ VIEWS.pdv=()=>{
   return `<h1>Vender (PDV)</h1><p class="sub">Toque nos produtos ou digite/bipe o código de barras e aperte Enter.</p>
   <div class="pdv">
     <div class="card"><input id="bp" placeholder="🔎 Buscar por nome ou código..." value="${esc(S.busca)}" autocomplete="off" oninput="S.busca=this.value;clearTimeout(S._bt);S._bt=setTimeout(()=>{S._refocus='bp';render()},300)" onkeydown="if(event.key==='Enter'){event.preventDefault();clearTimeout(S._bt);pdvCodigo(this.value)}" style="margin-bottom:14px">
-    <div class="prods">${lista.map(p=>`<div class="pc ${p.estoque<=0&&!servico(p)?'off':''}" onclick="add('${p.id}')"><div class="n">${esc(p.nome)}${p.descricao?`<div style="font-weight:500;font-size:11px;color:var(--muted)">${esc(p.descricao)}</div>`:''}</div><div class="p">${R(p.preco)}</div><div class="s">${servico(p)?'Serviço':'Estoque: '+N(p.estoque)+' '+esc(p.unidade)}</div></div>`).join('')||'<div class="empty">Nenhum produto</div>'}</div></div>
+    <div class="prods">${lista.map(p=>`<div class="pc ${p.estoque<=0&&!servico(p)?(semEst()?'semest':'off'):''}" onclick="add('${p.id}')"><div class="n">${esc(p.nome)}${p.descricao?`<div style="font-weight:500;font-size:11px;color:var(--muted)">${esc(p.descricao)}</div>`:''}</div><div class="p">${R(p.preco)}</div><div class="s">${servico(p)?'Serviço':'Estoque: '+N(p.estoque)+' '+esc(p.unidade)}</div></div>`).join('')||'<div class="empty">Nenhum produto</div>'}</div></div>
     <div class="card cart"><h3>Carrinho <span class="tag t-blue">${N(S.cart.reduce((s,i)=>s+i.qtd,0))} itens</span></h3>
       ${S.cart.length?S.cart.map((i,ix)=>`<div class="it"><div class="n">${esc(i.nome)}<div style="color:var(--muted);font-size:12px;font-weight:500">${R(i.preco)} cada</div></div><div class="qty"><button onclick="qt(${ix},-1)">−</button><b style="min-width:22px;text-align:center">${N(i.qtd)}</b><button onclick="qt(${ix},1)">+</button></div><b style="min-width:80px;text-align:right">${R(i.qtd*i.preco)}</b></div>`).join(''):'<div class="empty">Carrinho vazio</div>'}
       <div class="f" style="grid-template-columns:1fr 1fr;margin-top:14px">
@@ -489,8 +490,8 @@ function pdvCodigo(c){
     if(e.key.length===1)buf+=e.key;
   },true);
 })();
-function add(id){const p=P(id);const i=S.cart.find(x=>x.produto_id===id);const qn=(i?i.qtd:0)+1;if(!servico(p)&&qn>p.estoque)return toast('Sem estoque suficiente de '+p.nome,1);if(i)i.qtd++;else S.cart.push({produto_id:id,nome:p.nome,qtd:1,preco:p.preco});S._focus=0;render()}
-function qt(ix,d){const i=S.cart[ix];const p=P(i.produto_id);i.qtd+=d;if(p&&!servico(p)&&i.qtd>p.estoque){i.qtd=p.estoque;toast('Limite do estoque',1)}if(i.qtd<=0)S.cart.splice(ix,1);S._focus=0;render()}
+function add(id){const p=P(id);const i=S.cart.find(x=>x.produto_id===id);const qn=(i?i.qtd:0)+1;if(!servico(p)&&qn>p.estoque){if(!semEst())return toast('Sem estoque suficiente de '+p.nome,1);toast('Atenção: '+p.nome+' sem estoque no sistema. A venda vai deixar o estoque negativo — lance a entrada depois.',1)}if(i)i.qtd++;else S.cart.push({produto_id:id,nome:p.nome,qtd:1,preco:p.preco});S._focus=0;render()}
+function qt(ix,d){const i=S.cart[ix];const p=P(i.produto_id);i.qtd+=d;if(p&&!servico(p)&&i.qtd>p.estoque&&!semEst()){i.qtd=p.estoque;toast('Limite do estoque',1)}if(i.qtd<=0)S.cart.splice(ix,1);S._focus=0;render()}
 function finalizar(b,conferido){
   if(!S.cart.length)return toast('Carrinho vazio',1);
   if(!conferido){const r=checaVenda();if(r.a.length)return dupModal(r,'Esta venda parece repetida',()=>finalizar($('#bf'),1))}
@@ -755,12 +756,14 @@ function gravarNFe(form){const nf=S._nfe,f=Object.fromEntries(new FormData(form)
 })}
 
 // ---- Estoque
+async function defSemEst(v){try{await rpc('definir_vender_sem_estoque',{p_empresa:S.empresa.id,p_valor:v});S.empresa.vender_sem_estoque=v;toast(v?'Venda sem estoque liberada nesta empresa':'Venda sem estoque bloqueada');render()}catch(e){erro(e);render()}}
 VIEWS.estoque=()=>{
   const PE=S.produtos.filter(p=>!servico(p));
   const l=PE.filter(p=>!S.fEst||(S.fEst==='baixo'?repor(p):p.estoque<=0)).sort((a,b)=>S.fEst?a.estoque-b.estoque:0);const nRep=PE.filter(repor).length;
   const tc=PE.reduce((s,p)=>s+Math.max(p.estoque,0)*p.custo,0),tv=PE.reduce((s,p)=>s+Math.max(p.estoque,0)*p.preco,0);
   return `<h1>Estoque</h1><p class="sub">Posição atual de cada produto${dono()?', valor investido e potencial de venda':''}.</p>
   ${dono()?`<div class="grid k4"><div class="card kpi"><div class="l">Itens em estoque</div><div class="v">${N(PE.reduce((s,p)=>s+Math.max(p.estoque,0),0))}</div></div><div class="card kpi"><div class="l">Valor de custo</div><div class="v">${R(tc)}</div></div><div class="card kpi"><div class="l">Valor de venda</div><div class="v">${R(tv)}</div></div><div class="card kpi"><div class="l">Lucro potencial</div><div class="v" style="color:var(--ok)">${R(tv-tc)}</div></div></div>`:''}
+  ${dono()?`<label class="card" style="margin-top:16px;display:flex;gap:12px;align-items:center;cursor:pointer"><input type="checkbox" style="width:20px;height:20px" ${semEst()?'checked':''} onchange="defSemEst(this.checked)"><span><b>Permitir vender sem estoque</b><br><small style="color:var(--muted)">Quando o produto está zerado no sistema mas existe na prateleira, a venda é feita e o estoque fica negativo (em vermelho) até você lançar a entrada.</small></span></label>`:''}
   <div class="card tw" style="margin-top:16px"><h3>Posição por produto <select style="width:auto" onchange="S.fEst=this.value;render()"><option value="">Todos</option><option value="baixo" ${S.fEst==='baixo'?'selected':''}>🔴 Repor (${nRep})</option><option value="zero" ${S.fEst==='zero'?'selected':''}>Zerados</option></select></h3>
   <table><tr><th>Produto</th><th class="num">Estoque</th><th class="num">Mínimo</th>${dono()?'<th class="num">Custo médio</th><th class="num">Total custo</th>':''}<th>Status</th><th></th></tr>
   ${l.map(p=>{const s=status(p),rp=repor(p);return `<tr class="${rp?'baixo':''}"><td><b>${esc(p.nome)}</b><div style="color:var(--muted);font-size:12px">${esc(p.categoria)}</div></td><td class="num">${rp?`<b style="color:var(--bad)">${N(p.estoque)}</b>`:N(p.estoque)} ${esc(p.unidade)}</td><td class="num">${N(lim(p))}</td>${dono()?`<td class="num">${R(p.custo)}</td><td class="num">${R(Math.max(p.estoque,0)*p.custo)}</td>`:''}<td><span class="tag ${s[1]}">${s[0]}</span></td><td class="num"><button class="btn sm" onclick="kardex('${p.id}')">Movimentos</button></td></tr>`}).join('')||'<tr><td colspan="7" class="empty">Nenhum produto</td></tr>'}</table></div>`;
