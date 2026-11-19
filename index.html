@@ -1030,7 +1030,7 @@ function formOS(id){
     <div style="grid-column:span 4"><label>Observações</label><textarea name="obs" rows="3" style="width:100%">${esc(o.obs||'')}</textarea></div>
     <div style="grid-column:span 4;display:flex;gap:18px;flex-wrap:wrap">${chk('urgente','⚡ Urgente')}${chk('remoldagem','Remoldagem')}${chk('suspenso','Suspenso')}</div>
   </form>
-  <div class="row" style="margin-top:12px">${id&&dono()?`<button class="btn d" onclick="fechar();confirmar('Excluir a ficha ${esc(o.numero)}?',()=>delOS('${id}'))">Excluir</button>`:''}${id?`<button class="btn" onclick="salvarOS('${id}',true)">🖨️ Salvar e imprimir</button>`:''}${id&&o.venda_id&&dono()?`<button class="btn" onclick="fechar();reabrirOS('${id}')">↩ Reabrir ficha</button>`:''}<span class="sp"></span><button class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bos2" onclick="salvarOS('${id||''}')">Salvar</button>${!o.venda_id&&o.status!=='entregue'&&o.status!=='cancelado'?`<button class="btn ok" style="background:var(--ok);color:#fff;border-color:var(--ok)" onclick="salvarOS('${id||''}',false,true)">✓ Salvar e finalizar venda</button>`:''}</div>`);
+  <div class="row" style="margin-top:12px">${id&&dono()?`<button class="btn d" onclick="fechar();confirmar('Excluir a ficha ${esc(o.numero)}?',()=>delOS('${id}'))">Excluir</button>`:''}${id?`<button class="btn" onclick="salvarOS('${id}',true)">🖨️ Salvar e imprimir</button>`:''}${id&&o.venda_id&&dono()?`<button class="btn" onclick="fechar();reabrirOS('${id}')">↩ Reabrir ficha</button>`:''}${id&&!o.venda_id&&osAberta(o)?`<button class="btn" title="Passar os trabalhos desta ficha para outra ficha aberta da mesma clínica" onclick="fechar();juntarOS('${id}')">🔗 Juntar com outra ficha</button>`:''}<span class="sp"></span><button class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bos2" onclick="salvarOS('${id||''}')">Salvar</button>${!o.venda_id&&o.status!=='entregue'&&o.status!=='cancelado'?`<button class="btn ok" style="background:var(--ok);color:#fff;border-color:var(--ok)" onclick="salvarOS('${id||''}',false,true)">✓ Salvar e finalizar venda</button>`:''}</div>`);
   $('#mbox').style.width='min(980px,100%)';{const nf=$('#fos [name=numero]');nf.autocomplete='off';if(!id){nf.placeholder='Gerando número…';proxNumOS().then(n=>{if(n&&!nf.value){nf.value=n;nf.dataset.sug=n;nf.title='Número gerado automaticamente. Não precisa digitar.'}})}}
   S._osCompTrava=!!(o.componentes_baixados&&o.venda_id);(o.componentes||[]).forEach(c=>osCompLinha(c));
   {const f=$('#fos');if(!id){f.prevista.dataset.auto=1;f.data_lab.dataset.auto=1}
@@ -1077,11 +1077,38 @@ function salvarOS(id,imp,fin){
   [...fm.elements].forEach(e=>{if(!e.name||e.closest('#oscomp')||e.closest('#osserv'))return;if(e.type==='checkbox')d[e.name]=e.checked;else if(e.tagName==='SELECT'&&(e.name==='antagonista'||e.name==='registro'))d[e.name]=e.value===''?null:e.value==='true';else if(e.type==='number')d[e.name]=e.value===''?null:+e.value;else d[e.name]=e.value.trim()||null});
   busy($('#bos2'),async()=>{
     if(fin&&!(d.servicos||[]).length&&!(d.componentes||[]).some(c=>c.cobrar))return toast('Inclua ao menos um serviço ou um produto com "Cobrar" marcado para finalizar.',1);
+    if(!id&&!fin&&!S._osNovaOk&&d.cliente_id&&d.paciente){const pn=semAc(d.paciente).trim();
+      const mesmo=(S._os||[]).filter(o=>osAberta(o)&&!o.venda_id&&o.cliente_id===d.cliente_id&&semAc(o.paciente||'').trim()===pn);
+      if(mesmo.length){S._osPend=d;return modal(`<h3>🔗 Mesmo paciente com ficha aberta</h3><p style="margin:8px 0 14px;color:var(--muted)">${esc(d.paciente)} já tem ficha aberta nesta clínica. Quer incluir este trabalho nela, em vez de criar uma ficha nova?</p>
+        ${mesmo.map(o=>`<button class="btn" style="width:100%;justify-content:flex-start;margin-bottom:8px;text-align:left" onclick="juntarEm('${o.id}')">➕ Incluir na ficha <b>${esc(o.numero)}</b> — ${esc((o.trabalho||'sem trabalho').slice(0,50))} · entrada ${dataBR(o.data_entrada)}</button>`).join('')}
+        <div class="row" style="margin-top:8px"><span class="sp"></span><button class="btn" onclick="fechar()">Voltar</button><button class="btn p" onclick="S._osNovaOk=1;fechar();osNovaMesmo()">Criar ficha nova</button></div>`)}}
+    S._osNovaOk=0;
     if(id){await q(sb.from('ordens_servico').update(d).eq('id',id));const ox=(S._os||[]).find(x=>x.id===id);if(ox)Object.assign(ox,d)}
     else{const r=await q(sb.from('ordens_servico').insert({...d,empresa_id:S.empresa.id}).select('*'));if(r[0]){id=r[0].id;(S._os=S._os||[]).push(r[0])}toast('Ficha '+(r[0]&&r[0].numero||'')+' criada')}
     fechar();if(fin&&id)return finalizarOS(id);render();if(imp&&id)imprimirOS(id);
   });
 }
+// ---- Juntar trabalhos do mesmo paciente numa ficha só
+const _jn=(a,b,sep)=>[...new Set([a,b].flatMap(x=>(x||'').split(sep).map(y=>y.trim())).filter(Boolean))].join(sep);
+async function juntarEm(alvoId,origemId){
+  const t=(S._os||[]).find(x=>x.id===alvoId),d=S._osPend;if(!t||!d)return;
+  const novo={servicos:[...(t.servicos||[]),...(d.servicos||[])],trabalho:_jn(t.trabalho,d.trabalho,' + ')||null,elementos:_jn(t.elementos,d.elementos,', ')||null,obs:_jn(t.obs,d.obs,' · ')||null,cor:t.cor||d.cor||null,escala:t.escala||d.escala||null,
+    componentes:t.componentes_baixados?(t.componentes||[]):[...(t.componentes||[]),...(d.componentes||[])],urgente:!!(t.urgente||d.urgente)};
+  if(t.status==='pronto')novo.status='producao';
+  if(d.prevista&&(!t.prevista||d.prevista>t.prevista)){novo.prevista=d.prevista;if(d.data_lab)novo.data_lab=d.data_lab}
+  try{await q(sb.from('ordens_servico').update(novo).eq('id',alvoId));Object.assign(t,novo);
+    if(origemId){await q(sb.from('ordens_servico').delete().eq('id',origemId));S._os=S._os.filter(x=>x.id!==origemId)}
+    S._osPend=null;fechar();toast('Trabalho incluído na ficha '+t.numero+' ✅');render();setTimeout(()=>formOS(alvoId),300)}catch(e){erro(e)}}
+function osNovaMesmo(){const d=S._osPend;if(!d)return;busy(document.createElement('button'),async()=>{const r=await q(sb.from('ordens_servico').insert({...d,empresa_id:S.empresa.id}).select('*'));S._osNovaOk=0;S._osPend=null;if(r[0])(S._os=S._os||[]).push(r[0]);toast('Ficha '+(r[0]&&r[0].numero||'')+' criada');render()})}
+function juntarOS(id){
+  const o=(S._os||[]).find(x=>x.id===id);if(!o)return;
+  const alvos=(S._os||[]).filter(x=>x.id!==id&&osAberta(x)&&!x.venda_id&&x.cliente_id===o.cliente_id);
+  if(!alvos.length)return toast('Não há outra ficha aberta desta clínica para juntar.',1);
+  const pn=semAc(o.paciente||'').trim();alvos.sort((a,b)=>(semAc(b.paciente||'').trim()===pn)-(semAc(a.paciente||'').trim()===pn));
+  S._osPend={servicos:o.servicos||[],componentes:o.componentes_baixados?[]:(o.componentes||[]),trabalho:o.trabalho,elementos:o.elementos,obs:o.obs,cor:o.cor,escala:o.escala,prevista:o.prevista,data_lab:o.data_lab,urgente:o.urgente};
+  modal(`<h3>🔗 Juntar a ficha ${esc(o.numero)} com outra</h3><p style="margin:8px 0 14px;color:var(--muted)">Os serviços e o trabalho desta ficha passam para a ficha escolhida, e a <b>${esc(o.numero)}</b> é excluída.</p>
+  ${alvos.map(a=>`<button class="btn" style="width:100%;justify-content:flex-start;margin-bottom:8px;text-align:left" onclick="juntarEm('${a.id}','${id}')">➕ Passar para a ficha <b>${esc(a.numero)}</b> — ${esc(a.paciente||'—')} · ${esc((a.trabalho||'sem trabalho').slice(0,40))}${semAc(a.paciente||'').trim()===pn?' <span class="tag t-ok">mesmo paciente</span>':''}</button>`).join('')}
+  <div class="row" style="margin-top:8px"><span class="sp"></span><button class="btn" onclick="fechar()">Cancelar</button></div>`)}
 function reabrirOS(id){
   const o=(S._os||[]).find(x=>x.id===id);if(!o||!o.venda_id)return;
   confirmar(`Reabrir a ficha ${esc(o.numero)}? A venda dela será cancelada (sai do caixa e do financeiro) e a ficha volta para "Em produção" para você corrigir e finalizar de novo.`,async()=>{try{
