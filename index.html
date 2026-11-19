@@ -929,7 +929,7 @@ async function relFicha(id){
       <div><span>Subtotal:</span><b>${R(v.bruto)}</b></div>
       ${v.desconto?`<div><span>Desconto:</span><b>−${R(v.desconto)}</b></div>`:''}
       <div class="rs-dif"><span>Total:</span><b>${R(v.total)}</b></div>
-      <div><span>Pagamento:</span><b>${esc(v.pagamento||'—')}</b></div>
+      ${v.pagamento&&v.pagamento!=='Fiado'?`<div><span>Pagamento:</span><b>${esc(v.pagamento)}</b></div>`:''}
     </div>
     <div style="margin-top:34px;display:flex;gap:40px"><div style="flex:1;border-top:1px solid #1d2433;padding-top:4px;text-align:center;font-size:11px">${esc(emp.nome)}</div><div style="flex:1;border-top:1px solid #1d2433;padding-top:4px;text-align:center;font-size:11px">Recebido por</div></div>
     ${S.empresa.os_rodape?`<div style="margin-top:14px;text-align:center;font-weight:700;font-size:11px;white-space:pre-line">${esc(S.empresa.os_rodape)}</div>`:''}
