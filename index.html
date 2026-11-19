@@ -1082,9 +1082,11 @@ function salvarOS(id,imp,fin){
 }
 function reabrirOS(id){
   const o=(S._os||[]).find(x=>x.id===id);if(!o||!o.venda_id)return;
-  confirmar(`Reabrir a ficha ${esc(o.numero)}? A venda dela será cancelada (sai do financeiro) e a ficha volta para "Em produção" para você corrigir e finalizar de novo.`,async()=>{try{
-    const pg=await q(sb.from('lancamentos').select('id').eq('venda_id',o.venda_id).eq('pago',true));
-    if(pg.length)return toast('Essa ficha já tem pagamento recebido. Desfaça a baixa no financeiro antes de reabrir.',1);
+  confirmar(`Reabrir a ficha ${esc(o.numero)}? A venda dela será cancelada (sai do caixa e do financeiro) e a ficha volta para "Em produção" para você corrigir e finalizar de novo.`,async()=>{try{
+    const vd=(await q(sb.from('vendas').select('pagamento').eq('id',o.venda_id)))[0]||{};
+    // pago na hora (Pix, dinheiro, cartão…): o cancelamento já estorna o caixa. Fiado já quitado depois: precisa desfazer a baixa antes.
+    if(vd.pagamento==='Fiado'){const pg=await q(sb.from('lancamentos').select('id').eq('venda_id',o.venda_id).eq('pago',true));
+      if(pg.length)return toast('Essa ficha (fiado) já teve o pagamento recebido no fechamento. Peça a quem cuida do financeiro para desfazer a baixa em Financeiro › A receber e depois reabra.',1)}
     let sv=o.servicos||[];
     if(!sv.length){const v=(await q(sb.from('vendas').select('venda_itens(produto_id,nome,qtd,preco)').eq('id',o.venda_id)))[0];sv=((v&&v.venda_itens)||[]).filter(i=>{const p=P(i.produto_id);return !p||servico(p)}).map(i=>({produto_id:i.produto_id,nome:i.nome,qtd:+i.qtd,preco:+i.preco,pct:0}))}
     await rpc('cancelar_venda',{p_venda:o.venda_id});
