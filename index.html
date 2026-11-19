@@ -819,15 +819,15 @@ VIEWS.servexec=async()=>{
   const F=S.rs||(S.rs={cli:'',de:'',ate:''});if(!F.de){[F.de,F.ate]=mesAtual()}
   const E=S.empresa.id;
   const vs=await q(sb.from('vendas').select('id,numero,data,total,desconto,cliente_id,paciente,ficha,data_entrada,venda_itens(nome,qtd,preco,produto_id)').eq('empresa_id',E).eq('cancelada',false).not('cliente_id','is',null).gte('data',iniDia(F.de)).lte('data',fimDia(F.ate)).order('data'));
-  const pg=await q(sb.from('lancamentos').select('cliente_id,valor,data_pagamento').eq('empresa_id',E).eq('tipo','receber').eq('pago',true).not('cliente_id','is',null).gte('data_pagamento',F.de).lte('data_pagamento',F.ate));
+  const pg=await q(sb.from('lancamentos').select('cliente_id,valor,data_pagamento,forma_pagamento,descricao').eq('empresa_id',E).eq('tipo','receber').eq('pago',true).not('cliente_id','is',null).gte('data_pagamento',F.de).lte('data_pagamento',F.ate));
   const ab=await q(sb.from('lancamentos').select('cliente_id,valor').eq('empresa_id',E).eq('tipo','receber').eq('pago',false).not('cliente_id','is',null));
   const res={};const ad=(id)=>res[id]||(res[id]={serv:0,total:0,pago:0,aberto:0});
   vs.forEach(v=>{const r=ad(v.cliente_id);r.serv+=v.venda_itens.reduce((s,i)=>s+ +i.qtd,0);r.total+=+v.total});
   pg.forEach(l=>{ad(l.cliente_id).pago+=+l.valor});ab.forEach(l=>{if(res[l.cliente_id])res[l.cliente_id].aberto+=+l.valor});
-  S._rs={vs,pg,ab};
+  S._rs={vs,pg,ab};try{S._pb=await rpc('pode_baixar',{p_empresa:E})}catch(e){S._pb=false}
   const linhas=Object.entries(res).filter(([,r])=>r.total>0||r.pago>0).map(([id,r])=>({id,nome:(S.clientes.find(c=>c.id===id)||{}).nome||'(cliente removido)',...r})).sort((a,b)=>b.total-a.total);
   const tot=linhas.reduce((s,l)=>s+l.total,0),totp=linhas.reduce((s,l)=>s+l.pago,0);
-  return `<div class="row"><div><h1>Serviços executados</h1><p class="sub">Relatório mensal por cliente: serviços, pacientes e valores, pronto para imprimir em PDF e mandar.</p></div><span class="sp"></span>${dono()?'<button class="btn" onclick="formCabecalho()">🏢 Dados do cabeçalho</button>':''}</div>
+  return `<div class="row"><div><h1>Serviços executados</h1><p class="sub">Relatório mensal por cliente: serviços, pacientes e valores, pronto para imprimir em PDF e mandar.</p></div><span class="sp"></span>${S._pb?'<button class="btn ok" style="background:var(--ok);color:#fff;border-color:var(--ok)" onclick="formReceber()">💰 Receber pagamento</button> ':''}${dono()?'<button class="btn" onclick="formCabecalho()">🏢 Dados do cabeçalho</button>':''}</div>
   <div class="card"><div class="f">
     <div><label>Mês</label><input type="month" value="${F.de.slice(0,7)}" onchange="if(!this.value)return;const [a,m]=this.value.split('-');S.rs.de=this.value+'-01';S.rs.ate=this.value+'-'+String(new Date(+a,+m,0).getDate()).padStart(2,'0');render()"></div>
     <div><label>De</label><input type="date" value="${F.de}" onchange="S.rs.de=this.value;render()"></div>
@@ -838,17 +838,36 @@ VIEWS.servexec=async()=>{
   <div class="grid k4" style="margin-top:16px"><div class="card kpi"><div class="l">Clientes atendidos</div><div class="v">${linhas.filter(l=>l.total>0).length}</div></div><div class="card kpi"><div class="l">Total em serviços</div><div class="v">${R(tot)}</div></div><div class="card kpi"><div class="l">Recebido no período</div><div class="v" style="color:var(--ok)">${R(totp)}</div></div><div class="card kpi"><div class="l">Diferença</div><div class="v" style="color:${totp-tot<0?'var(--bad)':'var(--ok)'}">${R(totp-tot)}</div></div></div>
   <div class="card tw" style="margin-top:16px"><h3>Clientes no período <span class="sp"></span><span style="color:var(--muted);font-size:13px;font-weight:500">Toque em "Relatório" para gerar o extrato de cada um</span></h3>
   <table><tr><th>Cliente</th><th class="num">Serviços</th><th class="num">Total</th><th class="num">Recebido</th><th class="num">Diferença</th><th class="num">Em aberto (geral)</th><th></th></tr>
-  ${linhas.map(l=>`<tr><td><b>${esc(l.nome)}</b></td><td class="num">${N(l.serv)}</td><td class="num">${R(l.total)}</td><td class="num">${R(l.pago)}</td><td class="num" style="color:${l.pago-l.total<0?'var(--bad)':'var(--ok)'}">${R(l.pago-l.total)}</td><td class="num">${l.aberto?R(l.aberto):'—'}</td><td class="num"><button class="btn sm p" onclick="relServ('${l.id}')">📑 Relatório</button></td></tr>`).join('')||'<tr><td colspan="7" class="empty">Nenhuma venda com cliente neste período.<br><span style="font-size:13px">No PDV, escolha o cliente (e o paciente) ao finalizar, para a venda aparecer aqui.</span></td></tr>'}
+  ${linhas.map(l=>`<tr><td><b>${esc(l.nome)}</b></td><td class="num">${N(l.serv)}</td><td class="num">${R(l.total)}</td><td class="num">${R(l.pago)}</td><td class="num" style="color:${l.pago-l.total<0?'var(--bad)':'var(--ok)'}">${R(l.pago-l.total)}</td><td class="num">${l.aberto?R(l.aberto):'—'}</td><td class="num" style="white-space:nowrap">${S._pb?`<button class="btn sm" onclick="formReceber('${l.id}')">💰 Receber</button> `:''}<button class="btn sm p" onclick="relServ('${l.id}')">📑 Relatório</button></td></tr>`).join('')||'<tr><td colspan="7" class="empty">Nenhuma venda com cliente neste período.<br><span style="font-size:13px">No PDV, escolha o cliente (e o paciente) ao finalizar, para a venda aparecer aqui.</span></td></tr>'}
   </table></div>
   <div class="card" style="margin-top:16px"><h3>Gerar para um cliente</h3><div class="row" style="flex-wrap:nowrap"><select id="rscli">${optsList(S.clientes,S.rs.cli,'Escolha o cliente')}</select><button class="btn p" onclick="const c=$('#rscli').value;if(!c)return toast('Escolha o cliente',1);S.rs.cli=c;relServ(c)">Gerar relatório</button></div></div>`;
 };
 // descrição que vai para o cliente: sem a lista de tabelas de preço (L1/L2/L3)
 const descCli=pr=>pr&&pr.descricao&&!/^\s*tabela\s+l\d/i.test(pr.descricao)?' '+pr.descricao:'';
+const FORMAS_REC=['PIX','Dinheiro','Cartão de débito','Cartão de crédito','Cheque','Boleto','Depósito / TED'];
+async function formReceber(cid){
+  let ab=[];try{ab=await q(sb.from('lancamentos').select('cliente_id,valor').eq('empresa_id',S.empresa.id).eq('tipo','receber').eq('pago',false).not('cliente_id','is',null))}catch(e){}
+  const aberto=id=>ab.filter(l=>l.cliente_id===id).reduce((s,l)=>s+ +l.valor,0);
+  modal(`<h3>💰 Receber pagamento do cliente</h3><p class="sub" style="margin:4px 0 12px">O valor quita as fichas em aberto do cliente, da mais antiga para a mais nova. Se pagar a mais, fica como crédito.</p>
+  <form id="frc" class="f" style="grid-template-columns:1fr 1fr">
+   <div style="grid-column:span 2"><label>Cliente</label><select name="cli" required onchange="$('#rcab').textContent=R(+this.selectedOptions[0].dataset.ab||0);$('#frc').valor.value=(+this.selectedOptions[0].dataset.ab||0).toFixed(2)"><option value="">Escolha o cliente</option>${S.clientes.map(c=>`<option value="${c.id}" data-ab="${aberto(c.id)}" ${c.id===cid?'selected':''}>${esc(c.nome)}${aberto(c.id)?' — em aberto '+R(aberto(c.id)):''}</option>`).join('')}</select>
+    <div style="color:var(--muted);font-size:12.5px;margin-top:4px">Em aberto deste cliente: <b id="rcab">${R(cid?aberto(cid):0)}</b></div></div>
+   <div><label>Valor recebido (R$)</label><input name="valor" type="number" step="0.01" min="0.01" inputmode="decimal" required value="${cid&&aberto(cid)?aberto(cid).toFixed(2):''}"></div>
+   <div><label>Forma de pagamento</label><select name="forma">${FORMAS_REC.map(f=>`<option>${f}</option>`).join('')}</select></div>
+   <div><label>Data do pagamento</label><input name="data" type="date" value="${today()}" required></div>
+   ${MULTI()?`<div><label>Entrou na conta</label><select name="conta">${optsList(S.contas,'')}</select></div>`:`<input type="hidden" name="conta" value="${caixaId()||''}"><div></div>`}
+   <div style="grid-column:span 2"><label>Observação (opcional)</label><input name="obs" placeholder="Ex.: cheque nº 1234, boleto de outubro"></div>
+   <div class="row" style="grid-column:span 2"><span class="sp"></span><button type="button" class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="brc">✓ Registrar pagamento</button></div></form>`);
+  $('#frc').onsubmit=ev=>{ev.preventDefault();const f=Object.fromEntries(new FormData(ev.target));if(!f.cli)return toast('Escolha o cliente',1);
+    busy($('#brc'),async()=>{const r=await rpc('receber_cliente',{p_empresa:S.empresa.id,p_cliente:f.cli,p_valor:+f.valor,p_forma:f.forma,p_data:f.data,p_conta:f.conta||null,p_obs:f.obs||null});
+      fechar();toast(`Pagamento de ${R(+f.valor)} (${f.forma}) registrado: ${r.quitados} lançamento(s) quitado(s)${+r.credito>0?' e '+R(+r.credito)+' de crédito':''} ✅`);try{await recarregar()}catch(e){}render()})}}
 async function empDados(){try{return (await q(sb.from('empresas').select('nome,endereco,telefone,documento,whatsapp').eq('id',S.empresa.id)))[0]||{nome:S.empresa.nome}}catch(e){return {nome:S.empresa.nome}}}
 async function relServ(cid){
   const c=S.clientes.find(x=>x.id===cid)||{nome:'Cliente'},F=S.rs,emp=await empDados();
   const vs=(S._rs.vs||[]).filter(v=>v.cliente_id===cid);
-  const pago=(S._rs.pg||[]).filter(l=>l.cliente_id===cid).reduce((s,l)=>s+ +l.valor,0);
+  const pgs=(S._rs.pg||[]).filter(l=>l.cliente_id===cid);const pago=pgs.reduce((s,l)=>s+ +l.valor,0);
+  const pgAg={};pgs.forEach(l=>{const k=l.data_pagamento+'|'+(l.forma_pagamento||'Pagamento');pgAg[k]=(pgAg[k]||0)+ +l.valor});
+  const pgLin=Object.entries(pgAg).sort().map(([k,v])=>{const [d,f]=k.split('|');return {d,f,v}});
   const aberto=(S._rs.ab||[]).filter(l=>l.cliente_id===cid).reduce((s,l)=>s+ +l.valor,0);
   const ln=[];vs.forEach(v=>v.venda_itens.forEach(i=>{const pr=S.produtos.find(p=>p.id===i.produto_id);ln.push({qtd:+i.qtd,desc:i.nome+descCli(pr),ficha:v.ficha||('#'+v.numero),pac:v.paciente||'',valor:+i.qtd*+i.preco,ent:v.data_entrada,fin:v.data})}));
   const bruto=ln.reduce((s,l)=>s+l.valor,0),desc=vs.reduce((s,v)=>s+ +v.desconto,0),total=bruto-desc;
@@ -859,6 +878,7 @@ async function relServ(cid){
     <table class="rs-t"><thead><tr><th>Qtd</th><th>Descrição</th><th>Ficha</th><th>Paciente</th><th class="n">Valor</th><th>Entrada</th><th>Finalizado</th></tr></thead><tbody>
     ${ln.map(l=>`<tr><td>${N(l.qtd)}</td><td>${esc(l.desc)}</td><td class="nw">${esc(l.ficha)}</td><td>${esc(l.pac)||'—'}</td><td class="n">${R(l.valor)}</td><td class="nw">${dt(l.ent)}</td><td class="nw">${dt(l.fin)}</td></tr>`).join('')||'<tr><td colspan="7" style="text-align:center;padding:14px">Nenhum serviço no período</td></tr>'}
     </tbody></table>
+    ${pgLin.length?`<table class="rs-t" style="margin-top:10px;max-width:420px;margin-left:auto"><thead><tr><th>Pagamento recebido</th><th>Forma</th><th class="n">Valor</th></tr></thead><tbody>${pgLin.map(p=>`<tr><td class="nw">${dt(p.d)}</td><td>${esc(p.f)}</td><td class="n">${R(p.v)}</td></tr>`).join('')}</tbody></table>`:''}
     <div class="rs-tot">
       <div><span>Total dos serviços listados:</span><b>${R(bruto)}</b></div>
       ${desc?`<div><span>Descontos:</span><b>−${R(desc)}</b></div><div><span>Total geral:</span><b>${R(total)}</b></div>`:''}
@@ -934,7 +954,7 @@ async function gerarRelCli(cid){
   busy($('#brp'),async()=>{
     const E=S.empresa.id;
     const vs=await q(sb.from('vendas').select('id,numero,data,total,desconto,cliente_id,paciente,ficha,data_entrada,venda_itens(nome,qtd,preco,produto_id)').eq('empresa_id',E).eq('cliente_id',cid).eq('cancelada',false).gte('data',iniDia(de)).lte('data',fimDia(ate)).order('data'));
-    const pg=await q(sb.from('lancamentos').select('cliente_id,valor,data_pagamento').eq('empresa_id',E).eq('cliente_id',cid).eq('tipo','receber').eq('pago',true).gte('data_pagamento',de).lte('data_pagamento',ate));
+    const pg=await q(sb.from('lancamentos').select('cliente_id,valor,data_pagamento,forma_pagamento,descricao').eq('empresa_id',E).eq('cliente_id',cid).eq('tipo','receber').eq('pago',true).gte('data_pagamento',de).lte('data_pagamento',ate));
     const ab=await q(sb.from('lancamentos').select('cliente_id,valor').eq('empresa_id',E).eq('cliente_id',cid).eq('tipo','receber').eq('pago',false));
     S.rs=S.rs||{cli:'',de:'',ate:''};S.rs.de=de;S.rs.ate=ate;S._rs={vs,pg,ab};
     await relServ(cid);
