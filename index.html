@@ -244,7 +244,7 @@ async function carregarSessao(){
 async function trocarEmpresa(id){
   const e=(S.empresas||[]).find(x=>x.id===id);if(!e)return;
   try{localStorage.setItem('gp_emp',id)}catch(er){}
-  S.empresa=e;S.papel=e.papel;S.cart=[];S.busca='';S.pdvF={desc:0,pg:'PIX',cli:'',conta:null,venc:'',pac:'',fic:'',ent:''};S.rs={cli:'',de:'',ate:''};S.caixaDia=null;S.precSel={};S.etq.qtd={};S.buscaCad='';S.hDe=S.hAte='';S.view='painel';
+  S.empresa=e;S.papel=e.papel;S.cart=[];S.busca='';S.pdvF={desc:0,pg:/laborat/i.test(e.nome||'')?'Fiado':'PIX',cli:'',conta:null,venc:'',pac:'',fic:'',ent:''};S.rs={cli:'',de:'',ate:''};S.caixaDia=null;S.precSel={};S.etq.qtd={};S.buscaCad='';S.hDe=S.hAte='';S.view='painel';
   if(!ativa(e)&&!S.admin)return telaBloqueio();
   if(!ativa(e)&&S.admin){S.view='admin';return montarApp()}
   try{await recarregar()}catch(er){return erro(er)}
@@ -460,7 +460,7 @@ function finKpis(){
 async function atualizar(b){await busy(b,async()=>{await recarregar();render();toast('Dados atualizados')})}
 
 // ---- PDV
-VIEWS.pdv=()=>{
+VIEWS.pdv=()=>{if(ehLab()&&S.pdvF._lab!==S.empresa.id){S.pdvF.pg='Fiado';S.pdvF._lab=S.empresa.id}
   if(!MULTI())S.pdvF.conta=caixaId();else if(S.pdvF.conta===null&&S.contas[0])S.pdvF.conta=S.contas[0].id;
   const lista=S.produtos.filter(p=>!S.busca||(p.nome+' '+(p.descricao||'')+' '+(p.codigo||'')).toLowerCase().includes(S.busca.toLowerCase()));
   const bruto=S.cart.reduce((s,i)=>s+i.qtd*i.preco,0);
@@ -475,9 +475,9 @@ VIEWS.pdv=()=>{
         <div><label>Ficha / OS nº</label><input id="fic" placeholder="Ex.: 012826-1" value="${esc(S.pdvF.fic||'')}" oninput="S.pdvF.fic=this.value"></div>
         <div><label>Data de entrada</label><input id="ent" type="date" value="${S.pdvF.ent||''}" onchange="S.pdvF.ent=this.value"></div>
         <div><label>Desconto (R$)</label><input id="desc" type="number" min="0" step="0.01" value="${S.pdvF.desc}" oninput="S.pdvF.desc=this.value;$('#tot').textContent=R(Math.max(0,${bruto}-(+this.value||0)))"></div>
-        <div><label>Pagamento</label><select id="pg" onchange="S.pdvF.pg=this.value;render()">${['PIX','Dinheiro','Cartão de débito','Cartão de crédito','Boleto','Fiado'].map(o=>`<option ${o===S.pdvF.pg?'selected':''}>${o}</option>`).join('')}</select></div>
+        <div><label>Pagamento</label><select id="pg" onchange="S.pdvF.pg=this.value;render()">${(ehLab()?['Fiado','PIX','Dinheiro','Cartão de débito','Cartão de crédito','Boleto']:['PIX','Dinheiro','Cartão de débito','Cartão de crédito','Boleto','Fiado']).map(o=>`<option value="${o}" ${o===S.pdvF.pg?'selected':''}>${o==='Fiado'?(ehLab()?'📅 Mensal (fechamento do mês)':'Fiado / a prazo'):o}</option>`).join('')}</select>${S.pdvF.pg==='Fiado'&&ehLab()?'<div style="color:var(--muted);font-size:12px;margin-top:4px">O valor entra no relatório do mês do cliente. O pagamento é registrado no fechamento, em <b>Serviços executados › 💰 Receber</b>.</div>':''}</div>
         <div style="grid-column:span 2"><label>Cliente ${S.pdvF.pg==='Fiado'?'<b style="color:var(--warn)">(obrigatório no fiado)</b>':'(opcional)'}</label><div class="row" style="flex-wrap:nowrap"><select id="cli" onchange="S.pdvF.cli=this.value">${optsList(S.clientes,S.pdvF.cli,'Consumidor (sem cadastro)')}</select><button class="btn sm" title="Cadastrar cliente" onclick="formCad('clientes',null,true)">+ Novo</button></div></div>
-        ${S.pdvF.pg==='Fiado'?`<div style="grid-column:span 2"><label>Vencimento do fiado</label><input type="date" id="venc" value="${S.pdvF.venc||addDays(today(),30)}" onchange="S.pdvF.venc=this.value"></div>`
+        ${S.pdvF.pg==='Fiado'?`<div style="grid-column:span 2"><label>${ehLab()?'Vencimento (acerto)':'Vencimento do fiado'}</label><input type="date" id="venc" value="${S.pdvF.venc||vencPadrao()}" onchange="S.pdvF.venc=this.value"></div>`
         :S.contas.length&&MULTI()?`<div style="grid-column:span 2"><label>Recebido em (conta)</label><select id="cta" onchange="S.pdvF.conta=this.value">${optsList(S.contas,S.pdvF.conta,'Não lançar no financeiro')}</select></div>`:''}
       </div>
       <div class="total" id="tot">${R(bruto)}</div>
@@ -514,7 +514,7 @@ function finalizar(b,conferido){
     const F=S.pdvF,fiado=F.pg==='Fiado';
     if(fiado&&!F.cli)return toast('Escolha ou cadastre o cliente para vender fiado',1);
     const r=await rpc('registrar_venda',{p_empresa:S.empresa.id,p_itens:S.cart.map(i=>({produto_id:i.produto_id,qtd:i.qtd,preco:+i.preco})),p_desconto:+F.desc||0,p_pagamento:F.pg,p_cliente:null,
-      p_cliente_id:F.cli||null,p_conta:fiado?null:(F.conta||null),p_vencimento:fiado?(F.venc||addDays(today(),30)):null,p_paciente:F.pac||null,p_ficha:F.fic||null,p_entrada:F.ent||null});
+      p_cliente_id:F.cli||null,p_conta:fiado?null:(F.conta||null),p_vencimento:fiado?(F.venc||vencPadrao()):null,p_paciente:F.pac||null,p_ficha:F.fic||null,p_entrada:F.ent||null});
     if(F.os){try{const o=(await q(sb.from('ordens_servico').select('numero,componentes,componentes_baixados').eq('id',F.os)))[0];let falhas=[];
       if(o&&!o.componentes_baixados){for(const c of (o.componentes||[]).filter(c=>!c.cobrar)){try{await rpc('registrar_saida',{p_produto:c.produto_id,p_qtd:+c.qtd,p_motivo:'Uso na OS '+o.numero,p_obs:null})}catch(e){falhas.push((P(c.produto_id)||{}).nome||'componente')}}}
       await q(sb.from('ordens_servico').update({status:'entregue',venda_id:r.id,componentes_baixados:true}).eq('id',F.os));
@@ -1040,6 +1040,8 @@ function formOS(id){
    const cod=f.codigo;if(cod)cod.addEventListener('change',()=>{const v=cod.value.trim().replace(/^0+/,'');if(!v)return;const c=S.clientes.find(x=>(x.codigo||'').replace(/^0+/,'')===v);if(c){f.cliente_id.value=c.id;cod.value=c.codigo;toast('Cliente: '+c.nome)}else toast('Nenhum cliente com o código '+cod.value,1)})}
   (o.servicos&&o.servicos.length?o.servicos:[{}]).forEach(x=>osServLinha(x));osServTot();
 }
+// Laboratório: fechamento de 01 a 30 com acerto até o dia 10 do mês seguinte
+const vencPadrao=()=>{if(!ehLab())return addDays(today(),30);const d=new Date();return _isoD(new Date(d.getFullYear(),d.getMonth()+1,10))};
 const ehLab=()=>/laborat/i.test((S.empresa&&S.empresa.nome)||'');
 const prodsServ=()=>S.produtos.filter(p=>servico(p)&&p.ativo!==false);
 const osServVal=l=>(+l.qtd||0)*(+l.preco||0)*(1-(+l.pct||0)/100);
