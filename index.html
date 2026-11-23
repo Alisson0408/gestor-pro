@@ -710,6 +710,8 @@ const fmtDoc=v=>{const d=soDig(v);return d.length===14?d.replace(/^(\d{2})(\d{3}
 const fmtFone=v=>{const d=soDig(v);return d.length===10?d.replace(/^(\d{2})(\d{4})(\d{4})$/,'($1) $2-$3'):d.length===11?d.replace(/^(\d{2})(\d{5})(\d{4})$/,'($1) $2-$3'):(v||'')};
 const normTxt=v=>String(v||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim().toUpperCase();
 const UNID_NFE=u=>{u=normTxt(u);if(/^(KG|KGS|QUILO)/.test(u))return 'kg';if(/^(G|GR|GRAMA)/.test(u))return 'g';if(/^(L|LT|LITRO)/.test(u))return 'l';if(/^ML/.test(u))return 'ml';if(/^(CX|CAIXA)/.test(u))return 'cx';if(/^(PCT|PT|PACOTE)/.test(u))return 'pct';if(/^(M|MT|METRO)$/.test(u))return 'm';return 'un'};
+// Alguns fornecedores põem o lote no nome do item ("... LOTE L1917"): o lote sai do nome e vai para a entrada
+function separaLote(n){const m=String(n||'').match(/\s*[-–]?\s*\bLOTE\b\s*:?\s*([A-Z0-9][\w\-\/.]*)/i);return m?{nome:(n.slice(0,m.index)+n.slice(m.index+m[0].length)).replace(/\s+/g,' ').trim(),lote:m[1]}:{nome:n,lote:''}}
 function lerNFe(txt){
   const x=new DOMParser().parseFromString(txt,'application/xml');
   if(x.getElementsByTagName('parsererror').length)throw new Error('Arquivo XML inválido ou corrompido');
@@ -717,7 +719,7 @@ function lerNFe(txt){
   const inf=x.getElementsByTagName('infNFe')[0];
   if(!inf)throw new Error('Este XML não é de uma NF-e (nota de produto). Notas de serviço (NFS-e) não dão entrada no estoque.');
   const ide=tag(inf,'ide'),emit=tag(inf,'emit'),en=tag(emit,'enderEmit'),tot=tag(inf,'ICMSTot');
-  const itens=[...inf.getElementsByTagName('det')].map(d=>{const p=tag(d,'prod');return {codigo:g(p,'cProd'),nome:g(p,'xProd'),unidade:UNID_NFE(g(p,'uCom')),uCom:g(p,'uCom'),qtd:+g(p,'qCom')||0,custo:+g(p,'vUnCom')||0,total:+g(p,'vProd')||0,lote:g(tag(d,'rastro'),'nLote')}}).filter(i=>i.qtd>0);
+  const itens=[...inf.getElementsByTagName('det')].map(d=>{const p=tag(d,'prod'),sl=separaLote(g(p,'xProd'));return {codigo:g(p,'cProd'),nome:sl.nome,loteNome:sl.lote,unidade:UNID_NFE(g(p,'uCom')),uCom:g(p,'uCom'),qtd:+g(p,'qCom')||0,custo:+g(p,'vUnCom')||0,total:+g(p,'vProd')||0,lote:g(tag(d,'rastro'),'nLote')}}).map(i=>({...i,lote:i.lote||i.loteNome})).filter(i=>i.qtd>0);
   if(!itens.length)throw new Error('A nota não tem itens com quantidade');
   const dups=[...inf.getElementsByTagName('dup')].map(d=>({n:g(d,'nDup'),venc:g(d,'dVenc'),valor:+g(d,'vDup')||0})).filter(d=>d.venc&&d.valor>0);
   const vProd=+g(tot,'vProd')||itens.reduce((s,i)=>s+i.total,0);
@@ -779,10 +781,12 @@ function gravarNFe(form){const nf=S._nfe,f=Object.fromEntries(new FormData(form)
   const eid=S.empresa.id,fat=f.ratear&&nf.vProd>0?nf.vNF/nf.vProd:1,obs=`NF-e ${nf.numero}${nf.serie?'/'+nf.serie:''} · chave ${nf.chave}`;
   let fid=nf.fornId;
   if(!fid)fid=(await q(sb.from('fornecedores').insert({...nf.forn,obs:'Cadastrado pela importação da NF-e '+nf.numero,empresa_id:eid}).select().single())).id;
-  let novos=0;const vinc=vincLer();
+  let novos=0;const vinc=vincLer(),criados={};
   for(const [ix,it] of nf.itens.entries()){
     const custo=Math.round(it.custo*fat*10000)/10000;let pid=f['m'+ix];
-    if(pid==='__novo'){pid=(await q(sb.from('produtos').insert({codigo:it.codigo||null,nome:it.nome.slice(0,120),descricao:null,categoria:'Material',unidade:it.unidade,custo,preco:0,minimo:0,empresa_id:eid}).select().single())).id;novos++}
+    const ck=normTxt(it.codigo||it.nome);
+    if(pid==='__novo'&&criados[ck])pid=criados[ck]; // mesmo produto em 2 linhas da nota (lotes diferentes): cadastra uma vez só
+    else if(pid==='__novo'){pid=(await q(sb.from('produtos').insert({codigo:it.codigo||null,nome:it.nome.slice(0,120),descricao:null,categoria:'Material',unidade:it.unidade,custo,preco:0,minimo:0,empresa_id:eid}).select().single())).id;criados[ck]=pid;novos++}
     else{const pr=P(pid);if(pr&&!pr.codigo&&it.codigo){try{await q(sb.from('produtos').update({codigo:it.codigo}).eq('id',pid))}catch(e){}}}
     vinc[vincChave(nf.forn.documento,it)]=pid;
     await rpc('registrar_entrada',{p_produto:pid,p_qtd:it.qtd,p_custo:custo,p_obs:obs+(it.lote?' · lote '+it.lote:''),p_fornecedor:fid,p_pagamento:'nenhum',p_conta:null,p_vencimento:null});
