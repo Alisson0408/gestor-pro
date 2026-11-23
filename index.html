@@ -574,7 +574,7 @@ VIEWS.nfe=async()=>{
   return `<h1>📄 Nota fiscal (NF-e)</h1><p class="sub">Dê entrada nas compras com nota: fornecedor, produtos, custos e parcelas a pagar entram sozinhos.</p>
   <div class="card nfe-hero"><div style="font-size:44px;line-height:1">📥</div>
    <div style="flex:1;min-width:240px"><h2 style="margin:0 0 6px;font-size:22px">Importar nota fiscal de compra</h2>
-    <ol style="margin:0;padding-left:18px;line-height:1.7;color:var(--muted)"><li>Baixe o arquivo <b>XML</b> da nota (vem no e-mail do fornecedor ou no portal dele).</li><li>Toque no botão verde e escolha o arquivo.</li><li>Confira os itens na tela e clique em <b>Confirmar</b>.</li></ol></div>
+    <ol style="margin:0;padding-left:18px;line-height:1.7;color:var(--muted)"><li>Baixe o arquivo <b>XML</b> da nota (vem no e-mail do fornecedor ou no portal dele).</li><li>Toque no botão verde e escolha o arquivo.</li><li>O sistema reconhece sozinho: o que você <b>já tem</b> só soma no estoque, o que é <b>novo</b> é cadastrado. Confira e clique em <b>Dar entrada</b>.</li></ol></div>
    <label class="btn nfe-btn">📄 Escolher XML da nota<input type="file" accept=".xml,text/xml,application/xml" style="display:none" onchange="abrirXML(this)"></label></div>
   <div class="card" style="margin-top:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap"><div style="flex:1;min-width:220px"><b>🧾 Comprou sem nota fiscal?</b><div style="color:var(--muted);font-size:13px">Lance a entrada manualmente: produto, quantidade e custo.</div></div><button class="btn" onclick="go('entrada')">⬇️ Lançar entrada sem nota</button></div>
   <div class="card tw" style="margin-top:14px"><h3>Notas já lançadas</h3>${notas.length?`<table><tr><th>Data</th><th>Nota</th><th>Fornecedor</th><th class="num">Itens</th><th class="num">Valor</th></tr>${notas.map(n=>`<tr><td>${D(n.data)}</td><td><b>${esc(n.nf)}</b></td><td>${esc(nomeForn(n.forn)||'—')}</td><td class="num">${n.itens}</td><td class="num">${R(n.total)}</td></tr>`).join('')}</table>`:'<div class="empty">Nenhuma nota importada ainda</div>'}</div>`};
@@ -726,10 +726,21 @@ function lerNFe(txt){
       endereco:[[g(en,'xLgr'),g(en,'nro')].filter(Boolean).join(', '),g(en,'xBairro'),[g(en,'xMun'),g(en,'UF')].filter(Boolean).join('/'),g(en,'CEP')?'CEP '+g(en,'CEP'):''].filter(Boolean).join(' - ')||null},
     itens,dups,vProd,vFrete:+g(tot,'vFrete')||0,vDesc:+g(tot,'vDesc')||0,vNF:+g(tot,'vNF')||vProd};
 }
-function acharProdNFe(it){
+// Vínculos lembrados: código do fornecedor → produto (guardados por empresa)
+const vincKey=()=>'gp_vinc_'+(S.empresa&&S.empresa.id);
+const vincLer=()=>{try{return JSON.parse(localStorage.getItem(vincKey())||'{}')}catch(e){return {}}};
+const vincGravar=m=>{try{localStorage.setItem(vincKey(),JSON.stringify(m))}catch(e){}};
+const vincChave=(doc,it)=>soDig(doc)+'|'+normTxt(it.codigo||it.nome);
+function acharProdNFe(it,doc){
   const ps=S.produtos.filter(p=>!servico(p)),c=normTxt(it.codigo),n=normTxt(it.nome);
-  return (c&&ps.find(p=>normTxt(p.codigo)===c))||ps.find(p=>normTxt(p.nome)===n)||null;
+  const vid=vincLer()[vincChave(doc,it)],vp=vid&&ps.find(p=>p.id===vid);
+  return vp||(c&&ps.find(p=>normTxt(p.codigo)===c))||ps.find(p=>normTxt(p.nome)===n)||null;
 }
+function nfeStatus(sel){const td=sel.closest('tr').querySelector('.nfst');if(td)td.innerHTML=nfeTag(sel.value);
+  const v=[...document.querySelectorAll('#fnfe select[name^=m]')].map(s=>s.value),nv=v.filter(x=>x==='__novo').length;
+  const r=document.getElementById('nferes');if(r)r.innerHTML=nfeResumo(v.length-nv,nv)}
+const nfeTag=v=>v==='__novo'?'<span class="tag t-warn">➕ Novo — será cadastrado</span>':'<span class="tag t-ok">✅ Já existe — soma no estoque</span>';
+const nfeResumo=(ex,nv)=>`<b style="color:var(--ok)">✅ ${ex} item(ns) já cadastrado(s)</b> — só aumenta o estoque e atualiza o custo · <b style="color:var(--warn)">➕ ${nv} novo(s)</b> — cadastrados automaticamente. Se algum "novo" for um produto que você já tem com outro nome, escolha ele na lista: o sistema lembra nas próximas notas.`;
 async function abrirXML(inp){
   const file=inp.files&&inp.files[0];inp.value='';if(!file)return;
   try{
@@ -738,7 +749,7 @@ async function abrirXML(inp){
     const r=await checaNF({numero:nf.numero,chave:nf.chave,fornId:nf.fornId,fornNome:nf.forn.nome});
     if(r.b.length)return dupModal(r,'Esta nota já foi lançada');
     nf.avisos=r.a;
-    nf.itens.forEach(it=>{const p=acharProdNFe(it);it.prod=p?p.id:'__novo'});
+    nf.itens.forEach(it=>{const p=acharProdNFe(it,nf.forn.documento);it.prod=p?p.id:'__novo'});
     S._nfe=nf;telaNFe();
   }catch(e){erro(e)}
 }
@@ -750,14 +761,16 @@ function telaNFe(){
   ${nf.fornId?'✅ Fornecedor já cadastrado':'➕ Fornecedor novo — será cadastrado automaticamente'} · Produtos ${R(nf.vProd)}${nf.vFrete?' · Frete '+R(nf.vFrete):''}${nf.vDesc?' · Desconto '+R(nf.vDesc):''} · <b style="color:var(--text)">Total ${R(nf.vNF)}</b></p>
   <form id="fnfe" class="f" onsubmit="event.preventDefault();gravarNFe(this)">
   ${(nf.avisos||[]).length?`<div class="dupx" style="grid-column:1/-1" data-k='${esc(JSON.stringify(nf.avisos))}'><div class="dupav"><b>⚠️ Atenção — confira antes de salvar (possível duplicidade ou erro)</b>${nf.avisos.map(x=>`<div>• ${x}</div>`).join('')}<label class="dupchk"><input type="checkbox" class="dupok"> Conferi: está correto e <u>não</u> é duplicado — quero salvar</label></div></div>`:''}
-  <div class="tw c2" style="max-height:42vh;overflow:auto"><table><tr><th>Item da nota</th><th class="num">Qtd</th><th class="num">Custo un.</th><th>Vincular ao produto</th></tr>
-  ${nf.itens.map((it,ix)=>`<tr><td><b>${esc(it.nome)}</b><div style="color:var(--muted);font-size:12px">Cód. ${esc(it.codigo)}${it.lote?' · Lote '+esc(it.lote):''}</div></td><td class="num">${N(it.qtd)} ${esc(it.uCom)}</td><td class="num">${R(it.custo)}</td><td><select name="m${ix}" style="min-width:200px">${optsP(it.prod)}</select></td></tr>`).join('')}</table></div>
+  <div id="nferes" style="grid-column:1/-1;font-size:13px;line-height:1.5;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px">${nfeResumo(nf.itens.filter(i=>i.prod!=='__novo').length,nf.itens.filter(i=>i.prod==='__novo').length)}</div>
+  <div class="tw" style="grid-column:1/-1;max-height:46vh;overflow:auto"><table><tr><th>Item da nota</th><th class="num">Qtd</th><th class="num">Custo un.</th><th>Situação</th><th>Vincular ao produto</th></tr>
+  ${nf.itens.map((it,ix)=>`<tr><td><b>${esc(it.nome)}</b><div style="color:var(--muted);font-size:12px">Cód. ${esc(it.codigo)}${it.lote?' · Lote '+esc(it.lote):''}</div></td><td class="num">${N(it.qtd)} ${esc(it.uCom)}</td><td class="num">${R(it.custo)}</td><td class="nfst" style="white-space:nowrap">${nfeTag(it.prod)}</td><td><select name="m${ix}" style="min-width:200px" onchange="nfeStatus(this)">${optsP(it.prod)}</select></td></tr>`).join('')}</table></div>
   ${difer?`<label class="c2" style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" name="ratear" checked style="width:auto"> Somar frete/descontos no custo dos produtos (custo real de cada item)</label>`:''}
   <div class="c2"><label>Pagamento desta nota</label><select name="pg" onchange="document.querySelectorAll('.nfx').forEach(e=>e.classList.toggle('hide',!e.classList.contains('nf-'+this.value)))">
     <option value="prazo" ${nf.dups.length?'selected':''}>A prazo (conta a pagar)</option><option value="pago">${MULTI()?'Já paguei (sai do banco hoje)':'Já paguei (sai do caixa hoje)'}</option><option value="nenhum" ${nf.dups.length?'':'selected'}>Não lançar no financeiro</option></select></div>
   <div class="nfx nf-prazo c2 ${nf.dups.length?'':'hide'}">${nf.dups.length?`<p style="font-size:13px;color:var(--muted)">Serão lançadas ${nf.dups.length} parcela(s) conforme a nota: ${nf.dups.map(d=>`${new Date(d.venc+'T12:00').toLocaleDateString('pt-BR')} ${R(d.valor)}`).join(' · ')}</p>`:`<label>Vencimento</label><input name="v" type="date" value="${addDays(today(),30)}">`}</div>
   ${MULTI()?`<div class="nfx nf-pago c2 hide"><label>Pago com a conta</label><select name="cta">${optsList(S.contas,'',S.contas.length?undefined:'Cadastre uma conta em Financeiro')}</select></div>`:`<input type="hidden" name="cta" value="${caixaId()||''}">`}
   <div class="row c2" style="margin-top:6px"><span class="sp"></span><button type="button" class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bnfe">⬇️ Dar entrada em ${nf.itens.length} item(ns)</button></div></form>`);
+  $('#mbox').style.width='min(1080px,96vw)';
 }
 function gravarNFe(form){const nf=S._nfe,f=Object.fromEntries(new FormData(form));busy($('#bnfe'),async()=>{
   const r=await checaNF({numero:nf.numero,chave:nf.chave,fornId:nf.fornId,fornNome:nf.forn.nome});r.a=nf.avisos||[];
@@ -766,17 +779,19 @@ function gravarNFe(form){const nf=S._nfe,f=Object.fromEntries(new FormData(form)
   const eid=S.empresa.id,fat=f.ratear&&nf.vProd>0?nf.vNF/nf.vProd:1,obs=`NF-e ${nf.numero}${nf.serie?'/'+nf.serie:''} · chave ${nf.chave}`;
   let fid=nf.fornId;
   if(!fid)fid=(await q(sb.from('fornecedores').insert({...nf.forn,obs:'Cadastrado pela importação da NF-e '+nf.numero,empresa_id:eid}).select().single())).id;
-  let novos=0;
+  let novos=0;const vinc=vincLer();
   for(const [ix,it] of nf.itens.entries()){
     const custo=Math.round(it.custo*fat*10000)/10000;let pid=f['m'+ix];
     if(pid==='__novo'){pid=(await q(sb.from('produtos').insert({codigo:it.codigo||null,nome:it.nome.slice(0,120),descricao:null,categoria:'Material',unidade:it.unidade,custo,preco:0,minimo:0,empresa_id:eid}).select().single())).id;novos++}
+    else{const pr=P(pid);if(pr&&!pr.codigo&&it.codigo){try{await q(sb.from('produtos').update({codigo:it.codigo}).eq('id',pid))}catch(e){}}}
+    vinc[vincChave(nf.forn.documento,it)]=pid;
     await rpc('registrar_entrada',{p_produto:pid,p_qtd:it.qtd,p_custo:custo,p_obs:obs+(it.lote?' · lote '+it.lote:''),p_fornecedor:fid,p_pagamento:'nenhum',p_conta:null,p_vencimento:null});
   }
   const desc=`NF-e ${nf.numero} — ${nf.forn.nome}`.slice(0,140),base={categoria:'Compra de mercadoria',fornecedor_id:fid,cliente_id:null,tipo:'pagar',empresa_id:eid};
   if(f.pg==='pago')await q(sb.from('lancamentos').insert({...base,descricao:desc,valor:nf.vNF,vencimento:today(),pago:true,data_pagamento:today(),conta_id:f.cta}));
   else if(f.pg==='prazo'){const ps=nf.dups.length?nf.dups.map((d,i)=>({...base,descricao:desc+` (parc. ${i+1}/${nf.dups.length})`,valor:d.valor,vencimento:d.venc})):[{...base,descricao:desc,valor:nf.vNF,vencimento:f.v||addDays(today(),30)}];
     await q(sb.from('lancamentos').insert(ps))}
-  S._nfe=null;await recarregar();fechar();render();
+  vincGravar(vinc);S._nfe=null;await recarregar();fechar();render();
   toast(`NF-e ${nf.numero} importada: ${nf.itens.length} item(ns)${novos?' · '+novos+' produto(s) novo(s)':''}`);
   if(novos)setTimeout(()=>toast('Defina o preço de venda dos produtos novos em Produtos, se for vendê-los'),3400);
 })}
