@@ -939,6 +939,8 @@ function imprimirDoc(html,titulo,pg,mg){
   const t=document.title;document.title=titulo;
   setTimeout(()=>{try{window.print()}catch(e){toast('Não foi possível abrir a impressão',1)}document.title=t},300);
 }
+// Relatório de Serviço já sai em 80% (igual à "Escala 80" que a Nádia escolhia na impressão), com a escala do Chrome no Padrão
+function imprimirRelFicha(){imprimirDoc(`<div style="zoom:.8">${S._rfDoc.doc}</div>`,S._rfDoc.titulo)}
 function imprimirRelServ(){imprimirDoc(S._rsDoc.doc,'Servicos executados - '+S._rsDoc.c.nome)}
 // ---- Relatório de um serviço (ficha)
 async function relFicha(id){
@@ -982,7 +984,7 @@ async function relFicha(id){
   S._rfDoc={doc,txt,titulo:'Relatorio de servico - '+(v.ficha||('venda '+v.numero))+' - '+c.nome};
   const w=waLink(c.telefone);
   modal(`<div style="max-height:70vh;overflow:auto;background:#fff;border-radius:10px;padding:6px">${doc}</div>
-  <div class="row" style="margin-top:12px"><button class="btn" onclick="fechar()">Fechar</button><span class="sp"></span><button class="btn" onclick="navigator.clipboard.writeText(S._rfDoc.txt).then(()=>toast('Resumo copiado!'),()=>toast('Não foi possível copiar',1))">📋 Copiar resumo</button>${w?`<a class="btn" style="text-decoration:none" target="_blank" href="${w}?text=${encodeURIComponent(txt)}">📲 WhatsApp</a>`:''}<button class="btn p" onclick="imprimirDoc(S._rfDoc.doc,S._rfDoc.titulo)">🖨️ Imprimir / PDF</button></div>`);
+  <div class="row" style="margin-top:12px"><button class="btn" onclick="fechar()">Fechar</button><span class="sp"></span><button class="btn" onclick="navigator.clipboard.writeText(S._rfDoc.txt).then(()=>toast('Resumo copiado!'),()=>toast('Não foi possível copiar',1))">📋 Copiar resumo</button>${w?`<a class="btn" style="text-decoration:none" target="_blank" href="${w}?text=${encodeURIComponent(txt)}">📲 WhatsApp</a>`:''}<button class="btn p" onclick="imprimirRelFicha()">🖨️ Imprimir / PDF</button></div>`);
 }
 // ---- Relatório de um cliente em qualquer período
 function relCliPeriodo(cid){
