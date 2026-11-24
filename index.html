@@ -944,6 +944,10 @@ async function relFicha(id){
   if(!v)return toast('Venda não encontrada',1);
   const emp=await empDados(),c=S.clientes.find(x=>x.id===v.cliente_id)||{nome:v.cliente||'Consumidor'};
   const dt=x=>x?new Date(String(x).length===10?x+'T12:00':x).toLocaleDateString('pt-BR'):'—';
+  // ficha(s) ligada(s) a esta venda: trabalho a ser executado e observações também vão para o papel
+  let oss=(S._os||[]).filter(o=>o.venda_id===id);try{const r=await q(sb.from('ordens_servico').select('*').eq('venda_id',id));if(r&&r.length)oss=r}catch(e){}
+  const os1=oss[0]||{},txOS=[...new Set(oss.flatMap(o=>[o.trabalho,o.obs]).map(x=>String(x||'').trim()).filter(Boolean))];
+  const lin=(k,val)=>val?`<tr><td><b>${k}</b></td><td>${esc(val)}</td></tr>`:'';
   const doc=`<div class="rsdoc">
     <div class="rs-h"><div><div class="rs-emp">${esc(emp.nome)}</div><div class="rs-sub">${[emp.endereco,emp.telefone||emp.whatsapp,emp.documento?'CNPJ '+emp.documento:''].filter(Boolean).map(esc).join(' · ')}</div></div><div class="rs-tit">Relatório de Serviço<div class="rs-sub">${v.ficha?'Ficha '+esc(v.ficha)+' · ':''}Venda #${v.numero}</div></div></div>
     ${v.cancelada?'<div style="background:#fdecec;color:#c0392b;font-weight:700;padding:6px 8px;margin-bottom:8px;border-radius:4px">SERVIÇO CANCELADO</div>':''}
@@ -952,8 +956,11 @@ async function relFicha(id){
       ${c.endereco?`<tr><td><b>Endereço</b></td><td>${esc(c.endereco)}</td></tr>`:''}
       <tr><td><b>Paciente</b></td><td>${esc(v.paciente||'—')}</td></tr>
       <tr><td><b>Ficha / OS</b></td><td>${esc(v.ficha||'—')}</td></tr>
+      ${lin('Cirurgião-dentista',os1.dentista)}
       <tr><td><b>Entrada</b></td><td>${dt(v.data_entrada)}</td></tr>
+      ${os1.prevista?lin('Prevista',dt(os1.prevista)):''}
       <tr><td><b>Finalizado</b></td><td>${dt(v.data)}</td></tr>
+      ${lin('Elementos (dentes)',os1.elementos)}${lin('Cor / Escala',[os1.cor,os1.escala].filter(Boolean).join(' · '))}
     </tbody></table>
     <table class="rs-t"><thead><tr><th>Qtd</th><th>Descrição do serviço</th><th class="n">Valor unit.</th><th class="n">Total</th></tr></thead><tbody>
       ${v.itens.map(i=>{const pr=S.produtos.find(p=>p.id===i.produto_id);return `<tr><td>${N(i.qtd)}</td><td>${esc(i.nome)}${esc(descCli(pr))}</td><td class="n">${R(i.preco)}</td><td class="n">${R(i.qtd*i.preco)}</td></tr>`}).join('')}
@@ -964,11 +971,12 @@ async function relFicha(id){
       <div class="rs-dif"><span>Total:</span><b>${R(v.total)}</b></div>
       ${v.pagamento&&v.pagamento!=='Fiado'?`<div><span>Pagamento:</span><b>${esc(v.pagamento)}</b></div>`:''}
     </div>
+    ${txOS.length?`<div style="margin-top:14px;border:1px solid #1d2433;border-radius:4px;padding:8px 10px;font-size:12px;white-space:pre-line"><b>Trabalho / Observações:</b><br>${txOS.map(esc).join('\n')}</div>`:''}
     <div style="margin-top:34px;display:flex;gap:40px"><div style="flex:1;border-top:1px solid #1d2433;padding-top:4px;text-align:center;font-size:11px">${esc(emp.nome)}</div><div style="flex:1;border-top:1px solid #1d2433;padding-top:4px;text-align:center;font-size:11px">Recebido por</div></div>
     ${S.empresa.os_rodape?`<div style="margin-top:14px;text-align:center;font-weight:700;font-size:11px;white-space:pre-line">${esc(S.empresa.os_rodape)}</div>`:''}
     <div class="rs-rod">Emitido em ${new Date().toLocaleDateString('pt-BR')} · ${esc(emp.nome)}</div>
   </div>`;
-  const txt=`*${emp.nome}*\nRelatório de serviço${v.ficha?' — Ficha '+v.ficha:''}\nCliente: ${c.nome}${v.paciente?'\nPaciente: '+v.paciente:''}\nEntrada: ${dt(v.data_entrada)} · Finalizado: ${dt(v.data)}\n\n${v.itens.map(i=>`• ${N(i.qtd)}x ${i.nome} — ${R(i.qtd*i.preco)}`).join('\n')}${v.desconto?'\nDesconto: -'+R(v.desconto):''}\n*Total: ${R(v.total)}*\n\nSegue o relatório em PDF.`;
+  const txt=`*${emp.nome}*\nRelatório de serviço${v.ficha?' — Ficha '+v.ficha:''}\nCliente: ${c.nome}${v.paciente?'\nPaciente: '+v.paciente:''}\nEntrada: ${dt(v.data_entrada)} · Finalizado: ${dt(v.data)}${txOS.length?'\nObs.: '+txOS.join(' / '):''}\n\n${v.itens.map(i=>`• ${N(i.qtd)}x ${i.nome} — ${R(i.qtd*i.preco)}`).join('\n')}${v.desconto?'\nDesconto: -'+R(v.desconto):''}\n*Total: ${R(v.total)}*\n\nSegue o relatório em PDF.`;
   S._rfDoc={doc,txt,titulo:'Relatorio de servico - '+(v.ficha||('venda '+v.numero))+' - '+c.nome};
   const w=waLink(c.telefone);
   modal(`<div style="max-height:70vh;overflow:auto;background:#fff;border-radius:10px;padding:6px">${doc}</div>
@@ -1209,16 +1217,17 @@ async function imprimirOS(id){
     <div class="xt-r"><div class="t">Extrato Individual</div><div class="n">${esc(o.numero)}</div>${bar}
      <div class="xt-dt">Entrada: ${dt(o.data_entrada)}<br>Prevista: ${dt(o.prevista)}<br>Finalizado: ${v?dt(v.data):''}</div></div></div>
    ${o.urgente?'<div class="xt-urg">⚡ URGENTE</div>':''}
-   <div class="xt-box">Cliente: ${esc(c.nome||'')}<br>Conveniado: ${esc(o.paciente||'')}${o.sexo?' ('+esc(o.sexo)+')':''}<br>Ficha: ${esc(o.numero)}${o.dentista?' '+esc(o.dentista):''}<br>Endereço: ${esc(c.endereco||'')}</div>
+   <div class="xt-box">Cliente: ${esc(c.nome||'')}${c.telefone?' · '+esc(c.telefone):''}<br>Conveniado: ${esc(o.paciente||'')}${o.sexo?' ('+esc(o.sexo)+')':''}<br>Ficha: ${esc(o.numero)}${o.dentista?' '+esc(o.dentista):''}<br>Endereço: ${esc(c.endereco||'')}</div>
    <table class="xt-tb"><tr><th style="width:38px">Qtd.</th><th style="width:48px">Dentes</th><th style="width:70px">Elem.</th><th>Descrição (Serviços)</th><th class="n" style="width:78px">Unitário</th><th class="n" style="width:38px">%</th><th class="n" style="width:78px">Total</th></tr>
    ${its.map((i,k)=>`<tr><td>${N(i.q)}</td><td>${k?'':ncol}</td><td>${k?'':esc(nd)}</td><td>${esc(i.d)}</td><td class="n">${i.u==null?'':R(i.u)}</td><td class="n">${i.u==null?'':(+i.p||0).toFixed(2).replace('.',',')}</td><td class="n">${i.t==null?'':R(i.t)}</td></tr>`).join('')}</table>
    <div class="xt-mid"><div></div><div>${tem?`<div class="xt-sub">Subtotal ${R(sub)}${desc?' · Desconto '+R(desc):''}</div>`:''}<div class="xt-tot">Total Pedido: ${tot==null?'—':R(tot)}</div><div class="xt-sig">Recebemos o(s) trabalho(s) acima</div></div></div>
    <div class="xt-inf"><div><p>Escala: ${esc(o.escala||'')}</p><p>Cor: ${esc(o.cor||'')}</p><p>Antagonista: ${sn(o.antagonista)}</p><p>Cod: ${esc(o.codigo||c.codigo||'')}</p><p>Elemento(s): ${esc(nd||'')}</p></div>
     <div>${arc}<div class="xt-leg">C - Coroa &nbsp;I - Implante &nbsp;L - Laminado &nbsp;O - Onlay-Inlay &nbsp;P - Pôntico &nbsp;A - Ausente</div></div></div>
-   <div class="xt-obs">OBS:<br>${esc(o.obs||o.trabalho||'')}</div>
+   <div class="xt-obs" style="white-space:pre-line">${(()=>{const tr=String(o.trabalho||'').trim(),ob=String(o.obs||'').trim(),p=[];if(tr&&tr!==ob)p.push('TRABALHO A SER EXECUTADO:\n'+esc(tr));if(ob)p.push('OBS:\n'+esc(ob));return p.join('\n')||'OBS:'})()}</div>
    ${rod?`<div class="xt-rod" style="white-space:pre-line">${esc(rod)}</div>`:''}
   </div>`;
-  imprimirDoc(`<div style="zoom:1.36;width:770px">${doc}</div>`,'Extrato '+o.numero,'A4 landscape','9mm');
+  // A4 em pé, mesmo tamanho e margem do Relatório de Serviço
+  imprimirDoc(`<div style="zoom:1.1;width:640px">${doc}</div>`,'Extrato '+o.numero,'A4','12mm');
 }
 async function defFinVer(uid,v){try{await rpc('definir_fin_ver',{p_empresa:S.empresa.id,p_user:uid,p_valor:v});toast(v?'Financeiro somente para visualizar':'Financeiro liberado');render()}catch(e){erro(e);render()}}
 // ---- Manual do sistema (sempre atualizado: arquivos manual/*.html e *.pdf no próprio site)
