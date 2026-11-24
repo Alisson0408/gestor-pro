@@ -1193,6 +1193,8 @@ async function imprimirOS(id){
   const ini=(emp.nome||'').replace(/laborat[oó]rio|de|pr[oó]teses?|eireli|ltda|me/gi,'').trim().split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase()||'LAB';
   const arc=OS_ARC.map((r,k)=>`<div class="xt-arc ${k?'b':''}">${r.map((n,j)=>`<span class="${els.includes(n)?'on':''}${j===7?' mid':''}">${n}</span>`).join('')}</div>`).join('');
   const sn=x=>x===true?'Sim':x===false?'Não':'';
+  // Escala/Cor/Antagonista/Cod/Elementos e o odontograma só saem no extrato do laboratório (a Nexus pediu para tirar)
+  const odonto=ehLab();
   const doc=`<style>.xt{font-family:Arial,Helvetica,sans-serif;color:#000;font-size:10.5px;line-height:1.35;background:#fff}
   .xt-h{display:grid;grid-template-columns:54px 1fr 205px;gap:10px;align-items:start}
   .xt-logo{width:54px;height:54px;border:1.5px solid #000;display:grid;place-items:center;font-weight:900;font-size:17px;letter-spacing:1px}
@@ -1221,8 +1223,8 @@ async function imprimirOS(id){
    <table class="xt-tb"><tr><th style="width:38px">Qtd.</th><th style="width:48px">Dentes</th><th style="width:70px">Elem.</th><th>Descrição (Serviços)</th><th class="n" style="width:78px">Unitário</th><th class="n" style="width:38px">%</th><th class="n" style="width:78px">Total</th></tr>
    ${its.map((i,k)=>`<tr><td>${N(i.q)}</td><td>${k?'':ncol}</td><td>${k?'':esc(nd)}</td><td>${esc(i.d)}</td><td class="n">${i.u==null?'':R(i.u)}</td><td class="n">${i.u==null?'':(+i.p||0).toFixed(2).replace('.',',')}</td><td class="n">${i.t==null?'':R(i.t)}</td></tr>`).join('')}</table>
    <div class="xt-mid"><div></div><div>${tem?`<div class="xt-sub">Subtotal ${R(sub)}${desc?' · Desconto '+R(desc):''}</div>`:''}<div class="xt-tot">Total Pedido: ${tot==null?'—':R(tot)}</div><div class="xt-sig">Recebemos o(s) trabalho(s) acima</div></div></div>
-   <div class="xt-inf"><div><p>Escala: ${esc(o.escala||'')}</p><p>Cor: ${esc(o.cor||'')}</p><p>Antagonista: ${sn(o.antagonista)}</p><p>Cod: ${esc(o.codigo||c.codigo||'')}</p><p>Elemento(s): ${esc(nd||'')}</p></div>
-    <div>${arc}<div class="xt-leg">C - Coroa &nbsp;I - Implante &nbsp;L - Laminado &nbsp;O - Onlay-Inlay &nbsp;P - Pôntico &nbsp;A - Ausente</div></div></div>
+   ${odonto?`<div class="xt-inf"><div><p>Escala: ${esc(o.escala||'')}</p><p>Cor: ${esc(o.cor||'')}</p><p>Antagonista: ${sn(o.antagonista)}</p><p>Cod: ${esc(o.codigo||c.codigo||'')}</p><p>Elemento(s): ${esc(nd||'')}</p></div>
+    <div>${arc}<div class="xt-leg">C - Coroa &nbsp;I - Implante &nbsp;L - Laminado &nbsp;O - Onlay-Inlay &nbsp;P - Pôntico &nbsp;A - Ausente</div></div></div>`:''}
    <div class="xt-obs" style="white-space:pre-line">${(()=>{const tr=String(o.trabalho||'').trim(),ob=String(o.obs||'').trim(),p=[];if(tr&&tr!==ob)p.push('TRABALHO A SER EXECUTADO:\n'+esc(tr));if(ob)p.push('OBS:\n'+esc(ob));return p.join('\n')||'OBS:'})()}</div>
    ${rod?`<div class="xt-rod" style="white-space:pre-line">${esc(rod)}</div>`:''}
   </div>`;
