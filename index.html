@@ -381,7 +381,7 @@ function telaBloqueio(){
 async function sair(){await sb.auth.signOut();S.user=S.empresa=null;S.cart=[];S.view='painel';telaLogin()}
 
 // ============ APP ============
-const MENU=[['painel','📊','Painel'],['pdv','🛒','Vender (PDV)'],['nfe','📄','Nota fiscal (NF-e)',1],['os','🦷','Ordens de Serviço'],['produtos','📦','Produtos',1],['precificacao','🧮','Precificação',1],['entrada','⬇️','Entradas',1],['saida','⬆️','Saídas',1],['estoque','🗂️','Estoque'],['etiquetas','🏷️','Etiquetas'],['clientes','👤','Clientes'],['fornecedores','🚚','Fornecedores',1],['financeiro','🏦','Financeiro',1],['historico','🧾','Histórico'],['servexec','📑','Serviços executados',1],['equipe','👥','Equipe',1],['manual','📘','Manual'],['conta','💳','Minha conta']];
+const MENU=[['painel','📊','Painel'],['pdv','🛒','Vender (PDV)'],['nfe','📄','Nota fiscal (NF-e)',1],['os','🦷','Ordens de Serviço'],['produtos','📦','Produtos',1],['precificacao','🧮','Precificação',1],['entrada','⬇️','Entradas',1],['saida','⬆️','Saídas',1],['estoque','🗂️','Estoque'],['etiquetas','🏷️','Etiquetas'],['clientes','👤','Clientes'],['fornecedores','🚚','Fornecedores',1],['financeiro','🏦','Financeiro',1],['historico','🧾','Histórico'],['servexec','📑','Serviços executados',1],['fechamento','🗓️','Fechamento do mês',1],['equipe','👥','Equipe',1],['manual','📘','Manual'],['conta','💳','Minha conta']];
 function montarApp(){
   const itens=S.empresa&&ativa(S.empresa)?MENU.filter(m=>(!m[3]||dono())&&(m[0]!=='os'||S.empresa.os_ativo)).map(m=>m[0]==='financeiro'&&!MULTI()?['financeiro','💵','Caixa',1]:m):[];
   if(S.admin)itens.push(['admin','🛡️','Admin (clientes)'+(S.avisosN?' 🔔'+S.avisosN:'')]);
@@ -877,6 +877,71 @@ VIEWS.servexec=async()=>{
   </table></div>
   <div class="card" style="margin-top:16px"><h3>Gerar para um cliente</h3><div class="row" style="flex-wrap:nowrap"><select id="rscli">${optsList(S.clientes,S.rs.cli,'Escolha o cliente')}</select><button class="btn p" onclick="const c=$('#rscli').value;if(!c)return toast('Escolha o cliente',1);S.rs.cli=c;relServ(c)">Gerar relatório</button></div></div>`;
 };
+// ---- Fechamento do mês: fecha o mês, imprime os extratos e dá baixa por cliente (como no LabFácil)
+const FC_DIA_ACERTO=10;
+const mesBounds=m=>{const [a,b]=m.split('-').map(Number);return [m+'-01',m+'-'+String(new Date(a,b,0).getDate()).padStart(2,'0')]};
+const mesNome=m=>{const [a,b]=m.split('-').map(Number);return new Date(a,b-1,15).toLocaleDateString('pt-BR',{month:'long',year:'numeric'})};
+const mesShift=(m,k)=>{const [a,b]=m.split('-').map(Number);const d=new Date(a,b-1+k,15);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')};
+VIEWS.fechamento=async()=>{
+  const E=S.empresa.id;
+  if(!S.fc)S.fc={mes:mesShift(today().slice(0,7),-1)};
+  const [de,ate]=mesBounds(S.fc.mes);S.rs={cli:'',de,ate};
+  const [vs,pg,ab,rs,fx]=await Promise.all([
+    q(sb.from('vendas').select('id,numero,data,total,desconto,cliente_id,paciente,ficha,data_entrada,venda_itens(nome,qtd,preco,produto_id)').eq('empresa_id',E).eq('cancelada',false).not('cliente_id','is',null).gte('data',iniDia(de)).lte('data',fimDia(ate)).order('data')),
+    q(sb.from('lancamentos').select('cliente_id,valor,data_pagamento,forma_pagamento,descricao').eq('empresa_id',E).eq('tipo','receber').eq('pago',true).not('cliente_id','is',null).gte('data_pagamento',de).lte('data_pagamento',ate)),
+    q(sb.from('lancamentos').select('cliente_id,valor').eq('empresa_id',E).eq('tipo','receber').eq('pago',false).not('cliente_id','is',null)),
+    rpc('fechamento_resumo',{p_empresa:E,p_de:de,p_ate:ate}),
+    q(sb.from('fechamentos').select('fechado_em').eq('empresa_id',E).eq('mes',de))]);
+  S._rs={vs,pg,ab};try{S._pb=await rpc('pode_baixar',{p_empresa:E})}catch(e){S._pb=false}
+  const venc=mesShift(S.fc.mes,1)+'-'+String(FC_DIA_ACERTO).padStart(2,'0'),atrasou=today()>venc;
+  const linhas=(rs||[]).map(r=>({...r,total:+r.total,aberto:+r.aberto,pago:+r.pago,nome:(S.clientes.find(c=>c.id===r.cliente_id)||{}).nome||'(cliente removido)'}))
+    .sort((a,b)=>(b.aberto>0)-(a.aberto>0)||a.nome.localeCompare(b.nome,'pt-BR'));
+  S._fc={linhas,venc};
+  const tot=linhas.reduce((s,l)=>s+l.total,0),rec=linhas.reduce((s,l)=>s+l.pago,0),arec=linhas.reduce((s,l)=>s+l.aberto,0);
+  const fechado=fx&&fx[0],dtBR=x=>new Date(String(x).length===10?x+'T12:00':x).toLocaleDateString('pt-BR');
+  const sit=l=>l.aberto<=0.005?'<span class="tag t-ok">Pago</span>':(atrasou?'<span class="tag t-bad">Atrasado</span>':'<span class="tag t-warn">Aberto</span>');
+  return `<div class="row"><div><h1>🗓️ Fechamento do mês</h1><p class="sub">Feche o mês, imprima os extratos de todos os clientes e dê baixa quando o pagamento chegar. Acerto até o dia ${FC_DIA_ACERTO} do mês seguinte.</p></div></div>
+  <div class="card"><div class="f">
+    <div><label>Mês</label><input type="month" value="${S.fc.mes}" onchange="if(this.value){S.fc.mes=this.value;render()}"></div>
+    <div style="align-self:end"><button class="btn" style="width:100%" onclick="S.fc.mes=mesShift(S.fc.mes,-1);render()">◀ Mês anterior</button></div>
+    <div style="align-self:end"><button class="btn" style="width:100%" onclick="S.fc.mes=mesShift(S.fc.mes,1);render()">Próximo mês ▶</button></div>
+  </div></div>
+  <div class="card" style="margin-top:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    ${fechado?`<div><b style="color:var(--ok)">✅ ${mesNome(S.fc.mes)} fechado</b> em ${dtBR(fechado.fechado_em)}</div><span class="sp"></span><button class="btn" onclick="fcImprimirTodos()">🖨️ Imprimir todos os extratos</button><button class="btn" onclick="fcReabrir()">↩️ Reabrir mês</button>`
+      :`<div><b>${mesNome(S.fc.mes)}</b> ainda aberto · ${linhas.filter(l=>l.total>0).length} cliente(s)</div><span class="sp"></span>${linhas.length?`<button class="btn p" id="bfc" onclick="fcFechar()">🔒 Fechar mês e imprimir extratos</button>`:''}`}
+  </div>
+  <div class="grid k3" style="margin-top:16px"><div class="card kpi"><div class="l">Total do mês</div><div class="v">${R(tot)}</div></div><div class="card kpi"><div class="l">Recebido</div><div class="v" style="color:var(--ok)">${R(rec)}</div></div><div class="card kpi"><div class="l">A receber</div><div class="v" style="color:${arec>0?(atrasou?'var(--bad)':'var(--warn)'):'var(--ok)'}">${R(arec)}</div><div class="h">Vencimento ${dtBR(venc)}</div></div></div>
+  <div class="card tw" style="margin-top:16px"><h3>Clientes do mês</h3>
+  <table><tr><th>Cliente</th><th class="num">Fichas</th><th class="num">Total</th><th class="num">A receber</th><th>Situação</th><th></th></tr>
+  ${linhas.map(l=>`<tr><td><b>${esc(l.nome)}</b></td><td class="num">${N(l.fichas)}</td><td class="num">${R(l.total)}</td><td class="num">${l.aberto>0.005?R(l.aberto):'—'}</td><td>${sit(l)}</td><td class="num" style="white-space:nowrap"><button class="btn sm" onclick="relServ('${l.cliente_id}')">📑 Extrato</button>${S._pb&&l.aberto>0.005?` <button class="btn sm ok" style="background:var(--ok);color:#fff;border-color:var(--ok)" onclick="fcReceber('${l.cliente_id}')">✓ Recebido</button>`:''}</td></tr>`).join('')||'<tr><td colspan="6" class="empty">Nenhuma ficha com cliente neste mês.</td></tr>'}
+  </table>${S._pb?'':'<p class="sub" style="margin:10px 0 0">Só o responsável pelo financeiro desta empresa dá baixa nos pagamentos.</p>'}</div>`;
+};
+async function fcImprimirTodos(){
+  const emp=await empDados();const ls=(S._fc.linhas||[]).filter(l=>l.total>0);
+  if(!ls.length)return toast('Nenhum cliente neste mês',1);
+  imprimirDoc(ls.map((l,i)=>`<div style="${i?'page-break-before:always;':''}">${relServDoc(l.cliente_id,emp).doc}</div>`).join(''),'Fechamento '+S.fc.mes);
+}
+async function fcFechar(){
+  busy($('#bfc'),async()=>{await q(sb.from('fechamentos').insert({empresa_id:S.empresa.id,mes:S.fc.mes+'-01'}));toast('Mês fechado ✅ Abrindo os extratos para imprimir…');await render();fcImprimirTodos()});
+}
+async function fcReabrir(){
+  modal(`<h3>Reabrir ${mesNome(S.fc.mes)}?</h3><p class="sub" style="margin:6px 0 14px">Os lançamentos e as baixas continuam como estão. Só tira a marca de mês fechado.</p><div class="row"><span class="sp"></span><button class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="brf">↩️ Reabrir</button></div>`);
+  $('#brf').onclick=()=>busy($('#brf'),async()=>{await q(sb.from('fechamentos').delete().eq('empresa_id',S.empresa.id).eq('mes',S.fc.mes+'-01'));fechar();toast('Mês reaberto');render()});
+}
+function fcReceber(cid){
+  const l=(S._fc.linhas||[]).find(x=>x.cliente_id===cid);if(!l)return;const [de,ate]=mesBounds(S.fc.mes);
+  modal(`<h3>✓ Recebido — ${esc(l.nome)}</h3><p class="sub" style="margin:4px 0 12px">Dá baixa em todas as fichas de <b>${mesNome(S.fc.mes)}</b> deste cliente: <b>${R(l.aberto)}</b>.</p>
+  <form id="ffr" class="f" style="grid-template-columns:1fr 1fr">
+   <div><label>Forma de pagamento</label><select name="forma">${FORMAS_REC.map(f=>`<option>${f}</option>`).join('')}</select></div>
+   <div><label>Data do pagamento</label><input name="data" type="date" value="${today()}" required></div>
+   ${MULTI()?`<div><label>Entrou na conta</label><select name="conta">${optsList(S.contas,'')}</select></div><div></div>`:`<input type="hidden" name="conta" value="${caixaId()||''}">`}
+   <div style="grid-column:span 2"><label>Observação (opcional)</label><input name="obs" placeholder="Ex.: comprovante Pix, cheque nº 1234"></div>
+   <div style="grid-column:span 2;color:var(--muted);font-size:12.5px">Se o cliente pagou só uma parte, use <b>💰 Receber</b> em Serviços executados e digite o valor.</div>
+   <div class="row" style="grid-column:span 2"><span class="sp"></span><button type="button" class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bfr">✓ Confirmar ${R(l.aberto)}</button></div></form>`);
+  $('#ffr').onsubmit=ev=>{ev.preventDefault();const f=Object.fromEntries(new FormData(ev.target));
+    busy($('#bfr'),async()=>{const r=await rpc('receber_fechamento',{p_empresa:S.empresa.id,p_cliente:cid,p_de:de,p_ate:ate,p_forma:f.forma,p_data:f.data,p_conta:f.conta||null,p_obs:f.obs||null});
+      fechar();toast(`${l.nome}: ${R(+r.total)} recebido (${f.forma}) ✅`);try{await recarregar()}catch(e){}render()})};
+}
 // descrição que vai para o cliente: sem a lista de tabelas de preço (L1/L2/L3)
 const descCli=pr=>pr&&pr.descricao&&!/^\s*tabela\s+l\d/i.test(pr.descricao)?' '+pr.descricao:'';
 const FORMAS_REC=['PIX','Dinheiro','Cartão de débito','Cartão de crédito','Cheque','Boleto','Depósito / TED'];
@@ -898,7 +963,14 @@ async function formReceber(cid){
       fechar();toast(`Pagamento de ${R(+f.valor)} (${f.forma}) registrado: ${r.quitados} lançamento(s) quitado(s)${+r.credito>0?' e '+R(+r.credito)+' de crédito':''} ✅`);try{await recarregar()}catch(e){}render()})}}
 async function empDados(){try{return (await q(sb.from('empresas').select('nome,endereco,telefone,documento,whatsapp').eq('id',S.empresa.id)))[0]||{nome:S.empresa.nome}}catch(e){return {nome:S.empresa.nome}}}
 async function relServ(cid){
-  const c=S.clientes.find(x=>x.id===cid)||{nome:'Cliente'},F=S.rs,emp=await empDados();
+  const r=relServDoc(cid,await empDados());const {c}=r;S._rsDoc=r;
+  const w=waLink(c.telefone);
+  modal(`<div style="max-height:70vh;overflow:auto;background:#fff;border-radius:10px;padding:6px">${r.doc}</div>
+  <div class="row" style="margin-top:12px"><button class="btn" onclick="fechar()">Fechar</button><span class="sp"></span><button class="btn" onclick="copiarRelServ()">📋 Copiar resumo</button>${w?`<a class="btn" style="text-decoration:none" target="_blank" href="${w}?text=${encodeURIComponent(txtRelServ())}">📲 WhatsApp</a>`:''}<button class="btn p" onclick="imprimirRelServ()">🖨️ Imprimir / PDF</button></div>`);
+  $('#mbox').style.width='min(980px,100%)';
+}
+function relServDoc(cid,emp){
+  const c=S.clientes.find(x=>x.id===cid)||{nome:'Cliente'},F=S.rs;
   const vs=(S._rs.vs||[]).filter(v=>v.cliente_id===cid);
   const pgs=(S._rs.pg||[]).filter(l=>l.cliente_id===cid);const pago=pgs.reduce((s,l)=>s+ +l.valor,0);
   const pgAg={};pgs.forEach(l=>{const k=l.data_pagamento+'|'+(l.forma_pagamento||'Pagamento');pgAg[k]=(pgAg[k]||0)+ +l.valor});
@@ -924,11 +996,7 @@ async function relServ(cid){
     ${S.empresa.os_rodape?`<div style="margin-top:14px;text-align:center;font-weight:700;font-size:11px;white-space:pre-line">${esc(S.empresa.os_rodape)}</div>`:''}
     <div class="rs-rod">Emitido em ${new Date().toLocaleDateString('pt-BR')} · ${esc(emp.nome)}</div>
   </div>`;
-  S._rsDoc={doc,c,total,pago,ln,emp};
-  const w=waLink(c.telefone);
-  modal(`<div style="max-height:70vh;overflow:auto;background:#fff;border-radius:10px;padding:6px">${doc}</div>
-  <div class="row" style="margin-top:12px"><button class="btn" onclick="fechar()">Fechar</button><span class="sp"></span><button class="btn" onclick="copiarRelServ()">📋 Copiar resumo</button>${w?`<a class="btn" style="text-decoration:none" target="_blank" href="${w}?text=${encodeURIComponent(txtRelServ())}">📲 WhatsApp</a>`:''}<button class="btn p" onclick="imprimirRelServ()">🖨️ Imprimir / PDF</button></div>`);
-  $('#mbox').style.width='min(980px,100%)';
+  return {doc,c,total,pago,ln,emp};
 }
 function txtRelServ(){const r=S._rsDoc,F=S.rs,dt=x=>new Date(x+'T12:00').toLocaleDateString('pt-BR');return `*${r.emp.nome}*\nServiços executados de ${dt(F.de)} a ${dt(F.ate)}\nCliente: ${r.c.nome}\n\n${r.ln.map(l=>`• ${N(l.qtd)}x ${l.desc}${l.pac?' — Pac. '+l.pac:''} — ${R(l.valor)}`).join('\n')}\n\n*Total: ${R(r.total)}*\nPagamentos no período: ${R(r.pago)}\nDiferença: ${R(r.pago-r.total)}\n\nSegue o relatório em PDF. Qualquer dúvida estamos à disposição!`}
 function copiarRelServ(){navigator.clipboard.writeText(txtRelServ()).then(()=>toast('Resumo copiado!'),()=>toast('Não foi possível copiar',1))}
