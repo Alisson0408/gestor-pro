@@ -991,7 +991,6 @@ function relServDoc(cid,emp){
       ${desc?`<div><span>Descontos:</span><b>−${R(desc)}</b></div><div><span>Total geral:</span><b>${R(total)}</b></div>`:''}
       <div><span>Total de pagamentos no período:</span><b>${R(pago)}</b></div>
       <div class="rs-dif"><span>Total diferença:</span><b>${R(pago-total)}</b></div>
-      ${aberto?`<div><span>Saldo em aberto (todos os períodos):</span><b>${R(aberto)}</b></div>`:''}
     </div>
     ${S.empresa.os_rodape?`<div style="margin-top:14px;text-align:center;font-weight:700;font-size:11px;white-space:pre-line">${esc(S.empresa.os_rodape)}</div>`:''}
     <div class="rs-rod">Emitido em ${new Date().toLocaleDateString('pt-BR')} · ${esc(emp.nome)}</div>
