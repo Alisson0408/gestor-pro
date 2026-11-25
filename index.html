@@ -55,7 +55,7 @@ nav .ic{width:20px;text-align:center}
 main{flex:1;padding:28px 32px;max-width:1300px;width:100%}
 h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
 .sub{color:var(--muted);margin:4px 0 22px}
-.grid{display:grid;gap:16px}.k4{grid-template-columns:repeat(4,1fr)}.k2{grid-template-columns:1.4fr 1fr}
+.grid{display:grid;gap:16px}.k4{grid-template-columns:repeat(4,1fr)}.k3{grid-template-columns:repeat(3,1fr)}.k2{grid-template-columns:1.4fr 1fr}
 .card{background:linear-gradient(180deg,var(--panel),var(--panel3));border:1px solid var(--line);border-radius:var(--radius);padding:18px}
 .kpi .l{color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
 .kpi .v{font-size:24px;font-weight:800;margin-top:6px}.kpi .h{font-size:12px;color:var(--muted);margin-top:4px}
@@ -146,7 +146,7 @@ input:focus,select:focus{border-color:var(--brand)}
   nav{display:flex;gap:4px}nav button{white-space:nowrap;margin:0;padding:9px 11px;font-size:13px}
   .user,.aascopy{display:none}
   main{padding:18px 14px}
-  .k4{grid-template-columns:repeat(2,1fr)}.k2,.pdv{grid-template-columns:1fr}.f{grid-template-columns:1fr 1fr}
+  .k4{grid-template-columns:repeat(2,1fr)}.k3{grid-template-columns:1fr}.k2,.pdv{grid-template-columns:1fr}.f{grid-template-columns:1fr 1fr}
   .tw{overflow-x:auto}
 }
 .pixcard{margin-top:10px;border-radius:18px;padding:18px;color:#fff;text-align:center;background:linear-gradient(135deg,#6d28d9 0%,#2563eb 55%,#0ea5a4 100%);box-shadow:0 10px 30px rgba(79,70,229,.35)}
@@ -870,10 +870,10 @@ VIEWS.servexec=async()=>{
     <div style="align-self:end"><button class="btn" style="width:100%" onclick="[S.rs.de,S.rs.ate]=mesAtual();render()">Este mês</button></div>
     <div style="align-self:end"><button class="btn" style="width:100%" onclick="const d=new Date(S.rs.de+'T12:00');d.setMonth(d.getMonth()-1);const a=d.toISOString().slice(0,8);S.rs.de=a+'01';S.rs.ate=a+String(new Date(d.getFullYear(),d.getMonth()+1,0).getDate()).padStart(2,'0');render()">Mês anterior</button></div>
   </div></div>
-  <div class="grid k4" style="margin-top:16px"><div class="card kpi"><div class="l">Clientes atendidos</div><div class="v">${linhas.filter(l=>l.total>0).length}</div></div><div class="card kpi"><div class="l">Total em serviços</div><div class="v">${R(tot)}</div></div><div class="card kpi"><div class="l">Recebido no período</div><div class="v" style="color:var(--ok)">${R(totp)}</div></div><div class="card kpi"><div class="l">Diferença</div><div class="v" style="color:${totp-tot<0?'var(--bad)':'var(--ok)'}">${R(totp-tot)}</div></div></div>
+  <div class="grid k3" style="margin-top:16px"><div class="card kpi"><div class="l">Clientes atendidos</div><div class="v">${linhas.filter(l=>l.total>0).length}</div></div><div class="card kpi"><div class="l">Total em serviços</div><div class="v">${R(tot)}</div></div><div class="card kpi"><div class="l">Em aberto (geral)</div><div class="v" style="color:${linhas.reduce((s,l)=>s+l.aberto,0)>0?'var(--bad)':'var(--ok)'}">${R(linhas.reduce((s,l)=>s+l.aberto,0))}</div></div></div>
   <div class="card tw" style="margin-top:16px"><h3>Clientes no período <span class="sp"></span><span style="color:var(--muted);font-size:13px;font-weight:500">Toque em "Relatório" para gerar o extrato de cada um</span></h3>
-  <table><tr><th>Cliente</th><th class="num">Serviços</th><th class="num">Total</th><th class="num">Recebido</th><th class="num">Diferença</th><th class="num">Em aberto (geral)</th><th></th></tr>
-  ${linhas.map(l=>`<tr><td><b>${esc(l.nome)}</b></td><td class="num">${N(l.serv)}</td><td class="num">${R(l.total)}</td><td class="num">${R(l.pago)}</td><td class="num" style="color:${l.pago-l.total<0?'var(--bad)':'var(--ok)'}">${R(l.pago-l.total)}</td><td class="num">${l.aberto?R(l.aberto):'—'}</td><td class="num" style="white-space:nowrap">${S._pb?`<button class="btn sm" onclick="formReceber('${l.id}')">💰 Receber</button> `:''}<button class="btn sm p" onclick="relServ('${l.id}')">📑 Relatório</button></td></tr>`).join('')||'<tr><td colspan="7" class="empty">Nenhuma venda com cliente neste período.<br><span style="font-size:13px">No PDV, escolha o cliente (e o paciente) ao finalizar, para a venda aparecer aqui.</span></td></tr>'}
+  <table><tr><th>Cliente</th><th class="num">Serviços</th><th class="num">Total</th><th class="num">Em aberto (geral)</th><th></th></tr>
+  ${linhas.map(l=>`<tr><td><b>${esc(l.nome)}</b></td><td class="num">${N(l.serv)}</td><td class="num">${R(l.total)}</td><td class="num">${l.aberto?R(l.aberto):'—'}</td><td class="num" style="white-space:nowrap">${S._pb?`<button class="btn sm" onclick="formReceber('${l.id}')">💰 Receber</button> `:''}<button class="btn sm p" onclick="relServ('${l.id}')">📑 Relatório</button></td></tr>`).join('')||'<tr><td colspan="5" class="empty">Nenhuma venda com cliente neste período.<br><span style="font-size:13px">No PDV, escolha o cliente (e o paciente) ao finalizar, para a venda aparecer aqui.</span></td></tr>'}
   </table></div>
   <div class="card" style="margin-top:16px"><h3>Gerar para um cliente</h3><div class="row" style="flex-wrap:nowrap"><select id="rscli">${optsList(S.clientes,S.rs.cli,'Escolha o cliente')}</select><button class="btn p" onclick="const c=$('#rscli').value;if(!c)return toast('Escolha o cliente',1);S.rs.cli=c;relServ(c)">Gerar relatório</button></div></div>`;
 };
