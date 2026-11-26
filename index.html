@@ -381,7 +381,7 @@ function telaBloqueio(){
 async function sair(){await sb.auth.signOut();S.user=S.empresa=null;S.cart=[];S.view='painel';telaLogin()}
 
 // ============ APP ============
-const MENU=[['painel','📊','Painel'],['pdv','🛒','Vender (PDV)'],['nfe','📄','Nota fiscal (NF-e)',1],['os','🦷','Ordens de Serviço'],['produtos','📦','Produtos',1],['precificacao','🧮','Precificação',1],['entrada','⬇️','Entradas',1],['saida','⬆️','Saídas',1],['estoque','🗂️','Estoque'],['etiquetas','🏷️','Etiquetas'],['clientes','👤','Clientes'],['fornecedores','🚚','Fornecedores',1],['financeiro','🏦','Financeiro',1],['historico','🧾','Histórico'],['servexec','📑','Serviços executados',1],['fechamento','🗓️','Fechamento do mês',1],['equipe','👥','Equipe',1],['manual','📘','Manual'],['conta','💳','Minha conta']];
+const MENU=[['painel','📊','Painel'],['pdv','🛒','Vender (PDV)'],['nfe','📄','Nota fiscal (NF-e)',1],['os','🦷','Ordens de Serviço'],['produtos','📦','Produtos',1],['precificacao','🧮','Precificação',1],['entrada','⬇️','Entradas',1],['saida','⬆️','Saídas',1],['estoque','🗂️','Estoque'],['etiquetas','🏷️','Etiquetas'],['clientes','👤','Clientes'],['fornecedores','🚚','Fornecedores',1],['financeiro','🏦','Financeiro',1],['historico','🧾','Histórico'],['servexec','📑','Serviços executados',1],['fechamento','🗓️','Fechamento do mês',1],['movimento','📊','Movimento mensal',1],['equipe','👥','Equipe',1],['manual','📘','Manual'],['conta','💳','Minha conta']];
 function montarApp(){
   const itens=S.empresa&&ativa(S.empresa)?MENU.filter(m=>(!m[3]||dono())&&(m[0]!=='os'||S.empresa.os_ativo)).map(m=>m[0]==='financeiro'&&!MULTI()?['financeiro','💵','Caixa',1]:m):[];
   if(S.admin)itens.push(['admin','🛡️','Admin (clientes)'+(S.avisosN?' 🔔'+S.avisosN:'')]);
@@ -942,6 +942,39 @@ function fcReceber(cid){
     busy($('#bfr'),async()=>{const r=await rpc('receber_fechamento',{p_empresa:S.empresa.id,p_cliente:cid,p_de:de,p_ate:ate,p_forma:f.forma,p_data:f.data,p_conta:f.conta||null,p_obs:f.obs||null});
       fechar();toast(`${l.nome}: ${R(+r.total)} recebido (${f.forma}) ✅`);try{await recarregar()}catch(e){}render()})};
 }
+// ---- Movimento mensal: relatório por cliente de uma empresa ou de todas juntas (como o "Movimento Mensal" do LabFácil)
+VIEWS.movimento=async()=>{
+  if(!S.mv)S.mv={mes:today().slice(0,7),emp:S.empresa.id};
+  const lista=(S.empresas&&S.empresas.length?S.empresas:[S.empresa]);
+  if(S.mv.emp!=='todas'&&!lista.some(e=>e.id===S.mv.emp))S.mv.emp=S.empresa.id;
+  const alvo=S.mv.emp==='todas'?lista:lista.filter(e=>e.id===S.mv.emp);
+  const [de,ate]=mesBounds(S.mv.mes);
+  const vs=await q(sb.from('vendas').select('empresa_id,cliente,cliente_id,bruto,desconto,total').in('empresa_id',alvo.map(e=>e.id)).eq('cancelada',false).gte('data',iniDia(de)).lte('data',fimDia(ate)));
+  const secs=alvo.map(e=>{const g={};vs.filter(v=>v.empresa_id===e.id).forEach(v=>{const k=v.cliente_id||'—'+(v.cliente||'');const r=g[k]||(g[k]={nome:v.cliente||'Venda sem cliente (balcão)',n:0,deb:0,est:0,tot:0});r.n++;r.deb+= +v.bruto;r.est+= +v.desconto;r.tot+= +v.total});
+    const ls=Object.values(g).sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR'));return {e,ls,n:ls.reduce((s,l)=>s+l.n,0),deb:ls.reduce((s,l)=>s+l.deb,0),est:ls.reduce((s,l)=>s+l.est,0),tot:ls.reduce((s,l)=>s+l.tot,0)}});
+  const dtBR=x=>new Date(x+'T12:00').toLocaleDateString('pt-BR');
+  const tab=sec=>`<table class="rs-t"><thead><tr><th>Cliente</th><th class="n">Fichas</th><th class="n">− Débito</th><th class="n">+ Est. Déb.</th><th class="n">= Somatória</th></tr></thead><tbody>
+    ${sec.ls.map(l=>`<tr><td>${esc(l.nome)}</td><td class="n">${l.n}</td><td class="n">${R(l.deb)}</td><td class="n">${R(l.est)}</td><td class="n">${R(-l.tot)}</td></tr>`).join('')||'<tr><td colspan="5" style="text-align:center;padding:12px">Nenhum movimento no mês</td></tr>'}
+    <tr><td><b>Total ${esc(sec.e.nome)}</b></td><td class="n"><b>${sec.n}</b></td><td class="n"><b>${R(sec.deb)}</b></td><td class="n"><b>${R(sec.est)}</b></td><td class="n"><b>${R(-sec.tot)}</b></td></tr></tbody></table>`;
+  const todas=S.mv.emp==='todas',G={n:secs.reduce((s,x)=>s+x.n,0),deb:secs.reduce((s,x)=>s+x.deb,0),est:secs.reduce((s,x)=>s+x.est,0),tot:secs.reduce((s,x)=>s+x.tot,0)};
+  const doc=`<div class="rsdoc">
+    <div class="rs-h"><div><div class="rs-emp">${todas?'Consolidado — '+secs.map(x=>esc(x.e.nome)).join(' + '):esc(secs[0].e.nome)}</div></div><div class="rs-tit">Movimento Mensal<div class="rs-sub">${dtBR(de)} a ${dtBR(ate)}</div></div></div>
+    ${secs.map(x=>`${todas?`<div style="font-weight:800;font-size:13px;margin:12px 0 6px">${esc(x.e.nome)}</div>`:''}${tab(x)}`).join('')}
+    ${todas?`<div style="font-weight:800;font-size:13px;margin:14px 0 6px">Resumo das empresas</div><table class="rs-t"><thead><tr><th>Empresa</th><th class="n">Fichas</th><th class="n">− Débito</th><th class="n">+ Est. Déb.</th><th class="n">= Somatória</th></tr></thead><tbody>
+      ${secs.map(x=>`<tr><td>${esc(x.e.nome)}</td><td class="n">${x.n}</td><td class="n">${R(x.deb)}</td><td class="n">${R(x.est)}</td><td class="n">${R(-x.tot)}</td></tr>`).join('')}
+      <tr><td><b>Total geral</b></td><td class="n"><b>${G.n}</b></td><td class="n"><b>${R(G.deb)}</b></td><td class="n"><b>${R(G.est)}</b></td><td class="n"><b>${R(-G.tot)}</b></td></tr></tbody></table>`:''}
+    <div class="rs-rod">* Filtro pela data da venda/finalização · Emitido em ${new Date().toLocaleDateString('pt-BR')}</div></div>`;
+  S._mvDoc={doc,titulo:'Movimento mensal '+S.mv.mes+(todas?' - consolidado':' - '+secs[0].e.nome)};
+  return `<div class="row"><div><h1>📊 Movimento mensal</h1><p class="sub">Relatório do mês por cliente, de uma empresa ou das empresas juntas. Pronto para imprimir ou salvar em PDF.</p></div><span class="sp"></span><button class="btn p" onclick="imprimirDoc(S._mvDoc.doc,S._mvDoc.titulo)">🖨️ Imprimir / PDF</button></div>
+  <div class="card"><div class="f">
+    <div><label>Mês</label><input type="month" value="${S.mv.mes}" onchange="if(this.value){S.mv.mes=this.value;render()}"></div>
+    <div><label>Empresa</label><select onchange="S.mv.emp=this.value;render()">${lista.map(e=>`<option value="${e.id}" ${S.mv.emp===e.id?'selected':''}>${esc(e.nome)}</option>`).join('')}${lista.length>1?`<option value="todas" ${todas?'selected':''}>Todas as empresas juntas (consolidado)</option>`:''}</select></div>
+    <div style="align-self:end"><button class="btn" style="width:100%" onclick="S.mv.mes=mesShift(S.mv.mes,-1);render()">◀ Mês anterior</button></div>
+    <div style="align-self:end"><button class="btn" style="width:100%" onclick="S.mv.mes=mesShift(S.mv.mes,1);render()">Próximo mês ▶</button></div>
+  </div></div>
+  <div class="grid k3" style="margin-top:16px"><div class="card kpi"><div class="l">Fichas</div><div class="v">${G.n}</div></div><div class="card kpi"><div class="l">Débito do mês</div><div class="v">${R(G.deb)}</div></div><div class="card kpi"><div class="l">Somatória</div><div class="v">${R(-G.tot)}</div><div class="h">Débito menos estornos/descontos</div></div></div>
+  <div class="card" style="margin-top:16px;background:#fff;overflow:auto">${doc}</div>`;
+};
 // descrição que vai para o cliente: sem a lista de tabelas de preço (L1/L2/L3)
 const descCli=pr=>pr&&pr.descricao&&!/^\s*tabela\s+l\d/i.test(pr.descricao)?' '+pr.descricao:'';
 const FORMAS_REC=['PIX','Dinheiro','Cartão de débito','Cartão de crédito','Cheque','Boleto','Depósito / TED'];
