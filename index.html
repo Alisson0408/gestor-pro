@@ -10,7 +10,7 @@
 <html lang="pt-BR">
 <head>
 <script>try{if(localStorage.getItem('gp_tema')==='claro')document.documentElement.dataset.tema='claro'}catch(e){}</script>
-<meta charset="UTF-8">
+<meta charset="UTF-8"><meta name="referrer" content="strict-origin-when-cross-origin"><meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests; object-src 'none'; base-uri 'self'"><style id="aas-anti-frame">html{display:none}</style><script>if(self===top){var a=document.getElementById("aas-anti-frame");a.parentNode.removeChild(a)}else{top.location=self.location}</script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="author" content="Alisson · AAS Tecnologia Editorial">
 <meta name="copyright" content="© 2026 AAS Tecnologia Editorial. Todos os direitos reservados. Gestor PRO é software proprietário.">
@@ -999,7 +999,7 @@ async function relServ(cid){
   const r=relServDoc(cid,await empDados());const {c}=r;S._rsDoc=r;
   const w=waLink(c.telefone);
   modal(`<div style="max-height:70vh;overflow:auto;background:#fff;border-radius:10px;padding:6px">${r.doc}</div>
-  <div class="row" style="margin-top:12px"><button class="btn" onclick="fechar()">Fechar</button><span class="sp"></span><button class="btn" onclick="copiarRelServ()">📋 Copiar resumo</button>${w?`<a class="btn" style="text-decoration:none" target="_blank" href="${w}?text=${encodeURIComponent(txtRelServ())}">📲 WhatsApp</a>`:''}<button class="btn p" onclick="imprimirRelServ()">🖨️ Imprimir / PDF</button></div>`);
+  <div class="row" style="margin-top:12px"><button class="btn" onclick="fechar()">Fechar</button><span class="sp"></span><button class="btn" onclick="copiarRelServ()">📋 Copiar resumo</button>${w?`<a class="btn" style="text-decoration:none" target="_blank" rel="noopener noreferrer" href="${w}?text=${encodeURIComponent(txtRelServ())}">📲 WhatsApp</a>`:''}<button class="btn p" onclick="imprimirRelServ()">🖨️ Imprimir / PDF</button></div>`);
   $('#mbox').style.width='min(980px,100%)';
 }
 function relServDoc(cid,emp){
@@ -1084,7 +1084,7 @@ async function relFicha(id){
   S._rfDoc={doc,txt,titulo:'Relatorio de servico - '+(v.ficha||('venda '+v.numero))+' - '+c.nome};
   const w=waLink(c.telefone);
   modal(`<div style="max-height:70vh;overflow:auto;background:#fff;border-radius:10px;padding:6px">${doc}</div>
-  <div class="row" style="margin-top:12px"><button class="btn" onclick="fechar()">Fechar</button><span class="sp"></span><button class="btn" onclick="navigator.clipboard.writeText(S._rfDoc.txt).then(()=>toast('Resumo copiado!'),()=>toast('Não foi possível copiar',1))">📋 Copiar resumo</button>${w?`<a class="btn" style="text-decoration:none" target="_blank" href="${w}?text=${encodeURIComponent(txt)}">📲 WhatsApp</a>`:''}<button class="btn p" onclick="imprimirRelFicha()">🖨️ Imprimir / PDF</button></div>`);
+  <div class="row" style="margin-top:12px"><button class="btn" onclick="fechar()">Fechar</button><span class="sp"></span><button class="btn" onclick="navigator.clipboard.writeText(S._rfDoc.txt).then(()=>toast('Resumo copiado!'),()=>toast('Não foi possível copiar',1))">📋 Copiar resumo</button>${w?`<a class="btn" style="text-decoration:none" target="_blank" rel="noopener noreferrer" href="${w}?text=${encodeURIComponent(txt)}">📲 WhatsApp</a>`:''}<button class="btn p" onclick="imprimirRelFicha()">🖨️ Imprimir / PDF</button></div>`);
 }
 // ---- Relatório de um cliente em qualquer período
 function relCliPeriodo(cid){
@@ -1344,7 +1344,7 @@ VIEWS.manual=async()=>{
   return `<div class="row"><div><h1>📘 Manual do Gestor PRO</h1><p class="sub">Guia completo de ${esc(S.empresa.nome)}, sempre atualizado. Leia aqui, baixe em PDF ou imprima.</p></div><span class="sp"></span>
   <a class="btn" style="text-decoration:none" href="${pdf}" download="Manual-Gestor-PRO-${k==='lab'?'Laboratorio':'Nexus'}.pdf">⬇️ Baixar PDF</a>
   <button class="btn" onclick="try{$('#manfr').contentWindow.print()}catch(e){window.open('${url}','_blank')}">🖨️ Imprimir</button>
-  <a class="btn p" style="text-decoration:none" target="_blank" href="${url}">↗️ Tela cheia</a></div>
+  <a class="btn p" style="text-decoration:none" target="_blank" rel="noopener noreferrer" href="${url}">↗️ Tela cheia</a></div>
   <div class="card" style="padding:0;overflow:hidden;margin-top:6px"><iframe id="manfr" src="${url}" title="Manual" style="width:100%;height:calc(100vh - 210px);min-height:520px;border:0;background:#fff;display:block"></iframe></div>
   <p style="color:var(--muted);font-size:12.5px;margin-top:8px">Dúvidas que não estão no manual? Suporte AAS Tecnologia Editorial: WhatsApp (19) 98952-2187.</p>`;
 };
