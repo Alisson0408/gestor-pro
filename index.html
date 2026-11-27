@@ -277,6 +277,8 @@ async function recarregar(){
     q(sb.from('contas_bancarias').select('*').eq('empresa_id',eid).eq('ativo',true).order('nome'))
   ]);
   S.clientes=cli;S.fornecedores=forn;S.contas=contas.map(c=>({...c,saldo_inicial:+c.saldo_inicial}));
+  try{const [ls,pp]=await Promise.all([q(sb.from('listas_preco').select('numero,nome').eq('empresa_id',eid).order('numero')),q(sb.from('produto_precos').select('produto_id,lista,preco').eq('empresa_id',eid).limit(10000))]);
+    S.listas=ls||[];S.pp={};(pp||[]).forEach(r=>{(S.pp[r.produto_id]=S.pp[r.produto_id]||{})[r.lista]=+r.preco})}catch(e){S.listas=[];S.pp={}}
   if(!MULTI()&&!S.contas.some(c=>c.tipo==='caixa')&&dono()){try{const c=await q(sb.from('contas_bancarias').insert({empresa_id:eid,nome:'Caixa',banco:'Caixa da empresa',tipo:'caixa',saldo_inicial:0}).select().single());S.contas.push({...c,saldo_inicial:+c.saldo_inicial})}catch(e){console.warn(e)}}
   if(dono()){
     const [ab,sal]=await Promise.all([
@@ -409,6 +411,11 @@ function banner(){
 }
 const lim=p=>p.minimo>0?p.minimo:(+CONFIG.ALERTA_ESTOQUE||10);
 const servico=p=>/^servi[cç]o/i.test(String(p.categoria||'').trim()); // serviços (próteses etc.) não controlam estoque
+// Tabelas de preço (como no LabFácil): cada cliente pode ter uma tabela; sem preço na tabela, vale o preço normal do produto
+const listaCli=cid=>{const c=(S.clientes||[]).find(x=>x.id===cid);return c&&c.lista_preco?+c.lista_preco:null};
+const nomeLista=n=>{const l=(S.listas||[]).find(x=>+x.numero===+n);return l?l.nome:(n?'Tabela '+n:'')};
+const precoP=(p,cid)=>{if(!p)return 0;const l=listaCli(cid),t=l&&S.pp&&S.pp[p.id];return t&&t[l]>0?t[l]:+p.preco};
+const listasUsadas=()=>{const u=new Set((S.clientes||[]).map(c=>+c.lista_preco).filter(Boolean));return (S.listas||[]).filter(l=>u.has(+l.numero))};
 const semEst=()=>!!(S.empresa&&S.empresa.vender_sem_estoque);
 const repor=p=>!servico(p)&&p.ativo!==false&&p.estoque<=lim(p);
 const status=p=>servico(p)?['Serviço','t-ok']:p.estoque<0?['Negativo','t-bad']:p.estoque<=0?['Zerado','t-bad']:repor(p)?['Repor','t-bad']:['OK','t-ok'];
@@ -476,7 +483,7 @@ VIEWS.pdv=()=>{if(ehLab()&&S.pdvF._lab!==S.empresa.id){S.pdvF.pg='Fiado';S.pdvF.
         <div><label>Data de entrada</label><input id="ent" type="date" value="${S.pdvF.ent||''}" onchange="S.pdvF.ent=this.value"></div>
         <div><label>Desconto (R$)</label><input id="desc" type="number" min="0" step="0.01" value="${S.pdvF.desc}" oninput="S.pdvF.desc=this.value;$('#tot').textContent=R(Math.max(0,${bruto}-(+this.value||0)))"></div>
         <div><label>Pagamento</label><select id="pg" onchange="S.pdvF.pg=this.value;render()">${(ehLab()?['Fiado','PIX','Dinheiro','Cartão de débito','Cartão de crédito','Boleto']:['PIX','Dinheiro','Cartão de débito','Cartão de crédito','Boleto','Fiado']).map(o=>`<option value="${o}" ${o===S.pdvF.pg?'selected':''}>${o==='Fiado'?(ehLab()?'📅 Mensal (fechamento do mês)':'Fiado / a prazo'):o}</option>`).join('')}</select>${S.pdvF.pg==='Fiado'&&ehLab()?'<div style="color:var(--muted);font-size:12px;margin-top:4px">O valor entra no relatório do mês do cliente. O pagamento é registrado no fechamento, em <b>Serviços executados › 💰 Receber</b>.</div>':''}</div>
-        <div style="grid-column:span 2"><label>Cliente ${S.pdvF.pg==='Fiado'?'<b style="color:var(--warn)">(obrigatório no fiado)</b>':'(opcional)'}</label><div class="row" style="flex-wrap:nowrap"><select id="cli" onchange="S.pdvF.cli=this.value">${optsList(S.clientes,S.pdvF.cli,'Consumidor (sem cadastro)')}</select><button class="btn sm" title="Cadastrar cliente" onclick="formCad('clientes',null,true)">+ Novo</button></div></div>
+        <div style="grid-column:span 2"><label>Cliente ${S.pdvF.pg==='Fiado'?'<b style="color:var(--warn)">(obrigatório no fiado)</b>':'(opcional)'}</label><div class="row" style="flex-wrap:nowrap"><select id="cli" onchange="S.pdvF.cli=this.value;pdvAplicarTabela()">${optsList(S.clientes,S.pdvF.cli,'Consumidor (sem cadastro)')}</select><button class="btn sm" title="Cadastrar cliente" onclick="formCad('clientes',null,true)">+ Novo</button></div></div>
         ${S.pdvF.pg==='Fiado'?`<div style="grid-column:span 2"><label>${ehLab()?'Vencimento (acerto)':'Vencimento do fiado'}</label><input type="date" id="venc" value="${S.pdvF.venc||vencPadrao()}" onchange="S.pdvF.venc=this.value"></div>`
         :S.contas.length&&MULTI()?`<div style="grid-column:span 2"><label>Recebido em (conta)</label><select id="cta" onchange="S.pdvF.conta=this.value">${optsList(S.contas,S.pdvF.conta,'Não lançar no financeiro')}</select></div>`:''}
       </div>
@@ -505,7 +512,7 @@ function pdvCodigo(c){
     if(e.key.length===1)buf+=e.key;
   },true);
 })();
-function add(id){const p=P(id);const i=S.cart.find(x=>x.produto_id===id);const qn=(i?i.qtd:0)+1;if(!servico(p)&&qn>p.estoque){if(!semEst())return toast('Sem estoque suficiente de '+p.nome,1);toast('Atenção: '+p.nome+' sem estoque no sistema. A venda vai deixar o estoque negativo — lance a entrada depois.',1)}if(i)i.qtd++;else S.cart.push({produto_id:id,nome:p.nome,qtd:1,preco:p.preco});S._focus=0;render()}
+function add(id){const p=P(id);const i=S.cart.find(x=>x.produto_id===id);const qn=(i?i.qtd:0)+1;if(!servico(p)&&qn>p.estoque){if(!semEst())return toast('Sem estoque suficiente de '+p.nome,1);toast('Atenção: '+p.nome+' sem estoque no sistema. A venda vai deixar o estoque negativo — lance a entrada depois.',1)}if(i)i.qtd++;else S.cart.push({produto_id:id,nome:p.nome,qtd:1,preco:precoP(p,S.pdvF.cli)});S._focus=0;render()}
 function qt(ix,d){const i=S.cart[ix];const p=P(i.produto_id);i.qtd+=d;if(p&&!servico(p)&&i.qtd>p.estoque&&!semEst()){i.qtd=p.estoque;toast('Limite do estoque',1)}if(i.qtd<=0)S.cart.splice(ix,1);S._focus=0;render()}
 function finalizar(b,conferido){
   if(!S.cart.length)return toast('Carrinho vazio',1);
@@ -553,13 +560,18 @@ function formProd(id){
   <div><label>Preço de custo (R$)</label><input name="custo" type="number" min="0" step="0.01" value="${id?(+p.custo).toFixed(2):''}"></div>
   <div><label>Preço de venda (R$) *</label><input name="preco" type="number" min="0" step="0.01" required value="${p.preco}"></div>
   ${id?'<p style="grid-column:span 2;color:var(--muted);font-size:12px">O estoque só muda por Entradas, Saídas e Vendas — assim tudo fica registrado.</p>':'<div style="grid-column:span 2"><label>Estoque inicial</label><input name="estoque" type="number" min="0" step="any" value="0"></div>'}
+  ${listasUsadas().length?`<div style="grid-column:span 2;border-top:1px solid var(--line);padding-top:10px"><label>Preço por tabela <span style="font-weight:400;color:var(--muted)">(em branco = usa o preço de venda)</span></label><div class="f" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));margin-top:6px">${listasUsadas().map(l=>`<div><label style="font-size:12px">${l.numero} - ${esc(l.nome)}</label><input name="lp_${l.numero}" type="number" step="0.01" min="0" inputmode="decimal" value="${id&&S.pp[id]&&S.pp[id][l.numero]?S.pp[id][l.numero].toFixed(2):''}"></div>`).join('')}</div></div>`:''}
   <div class="row" style="grid-column:span 2;margin-top:6px">${id?`<button type="button" class="btn d" onclick="delProd('${id}')">Excluir</button>`:''}<span class="sp"></span><button type="button" class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bs">Salvar</button></div></form>`);
   $('#fp').onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));
     const d={codigo:f.codigo.trim()||null,nome:f.nome.trim(),descricao:f.descricao.trim()||null,categoria:f.categoria.trim()||null,unidade:f.unidade,custo:+f.custo||0,preco:+f.preco||0,minimo:+f.minimo||0};
     if(!dupBox(e.target,checaProd(d,id)))return;
     busy($('#bs'),async()=>{
+      let pid=id;
       if(id)await q(sb.from('produtos').update(d).eq('id',id));
-      else{const np=await q(sb.from('produtos').insert({...d,empresa_id:S.empresa.id}).select().single());if(+f.estoque>0)await rpc('registrar_entrada',{p_produto:np.id,p_qtd:+f.estoque,p_custo:d.custo||null,p_obs:'Estoque inicial'})}
+      else{const np=await q(sb.from('produtos').insert({...d,empresa_id:S.empresa.id}).select().single());pid=np.id;if(+f.estoque>0)await rpc('registrar_entrada',{p_produto:np.id,p_qtd:+f.estoque,p_custo:d.custo||null,p_obs:'Estoque inicial'})}
+      for(const l of listasUsadas()){const v=+f['lp_'+l.numero]||0,old=pid&&S.pp[pid]&&S.pp[pid][l.numero];
+        if(v>0&&v!==old)await q(sb.from('produto_precos').upsert({empresa_id:S.empresa.id,produto_id:pid,lista:+l.numero,preco:v},{onConflict:'produto_id,lista'}));
+        else if(!(v>0)&&old)await q(sb.from('produto_precos').delete().eq('produto_id',pid).eq('lista',+l.numero))}
       await recarregar();fechar();toast('Produto salvo');render();
     });
   };
@@ -1149,7 +1161,7 @@ function formOS(id){
   modal(`<h3>🦷 ${id?'Ficha '+esc(o.numero):'Nova ficha'} ${id?`<span class="tag ${OS_ST[o.status][1]}">${OS_ST[o.status][0]}</span>`:''}</h3>
   <form id="fos" class="f" style="grid-template-columns:repeat(4,1fr);max-height:68vh;overflow:auto;padding-right:4px">
     ${inp('numero','Nº da ficha',undefined,'')}${inp('data_entrada','Data de entrada','date')}${inp('prevista','Prevista (entrega)','date')}${inp('data_lab','Data laboratório','date')}
-    <div style="grid-column:span 2"><label>Clínica / Consultório (cliente)</label><select name="cliente_id" onchange="const c=S.clientes.find(x=>x.id===this.value),f=$('#fos [name=codigo]');if(f&&c&&c.codigo)f.value=c.codigo">${optsList(S.clientes,o.cliente_id||'','Escolha a clínica')}</select></div>${inp('dentista','Cirurgião-dentista')}<div><label>Cód. do dentista</label><input name="codigo" value="${esc(o.codigo||((S.clientes.find(x=>x.id===o.cliente_id)||{}).codigo)||'')}" placeholder="vem do cadastro"></div>
+    <div style="grid-column:span 2"><label>Clínica / Consultório (cliente)</label><select name="cliente_id" onchange="const c=S.clientes.find(x=>x.id===this.value),f=$('#fos [name=codigo]');if(f&&c&&c.codigo)f.value=c.codigo;osAplicarTabela()">${optsList(S.clientes,o.cliente_id||'','Escolha a clínica')}</select></div>${inp('dentista','Cirurgião-dentista')}<div><label>Cód. do dentista</label><input name="codigo" value="${esc(o.codigo||((S.clientes.find(x=>x.id===o.cliente_id)||{}).codigo)||'')}" placeholder="vem do cadastro"></div>
     ${inp('paciente','Paciente',undefined,'style="grid-column:span 2"')}<div><label>Sexo</label><select name="sexo"><option value="">—</option>${['Fem.','Mas.'].map(x=>`<option ${o.sexo===x?'selected':''}>${x}</option>`).join('')}</select></div><div><label>Tipo</label><select name="tipo">${['Pedido','Retorno','Remoldagem','Conserto'].map(x=>`<option ${o.tipo===x?'selected':''}>${x}</option>`).join('')}</select></div>
     ${inp('cor','Cor do dente')}${inp('escala','Escala')}${inp('pastilhas','Pastilhas')}${inp('substrato','Substrato')}
     <div style="grid-column:span 3"><label>Trabalho a ser executado</label><textarea name="trabalho" rows="2" style="width:100%">${esc(o.trabalho||'')}</textarea></div>${inp('elementos','Elementos (dentes) · ex.: 47 ou 11, 21')}
@@ -1194,10 +1206,12 @@ const osServVal=l=>(+l.qtd||0)*(+l.preco||0)*(1-(+l.pct||0)/100);
 function osServLinha(x={}){
   const d=document.createElement('div');d.className='ossl';d.style.cssText='display:grid;grid-template-columns:1fr 70px 110px 70px 110px 34px;gap:6px;align-items:center;margin-bottom:6px';
   const ls=prodsServ();
-  d.innerHTML=`<select class="osp" onchange="osServPreco(this)"><option value="">Escolha o serviço</option>${ls.map(p=>`<option value="${p.id}" data-pr="${+p.preco||0}" ${p.id===x.produto_id?'selected':''}>${esc(p.nome)}</option>`).join('')}${x.produto_id&&!ls.find(p=>p.id===x.produto_id)?`<option value="${esc(x.produto_id)}" selected>${esc(x.nome||'Serviço')}</option>`:''}</select><input class="osq" type="number" min="0" step="any" value="${x.qtd??1}" oninput="osServTot()"><input class="osu" type="number" min="0" step="0.01" value="${x.preco??''}" placeholder="0,00" oninput="osServTot()"><input class="osd" type="number" min="0" max="100" step="any" value="${x.pct??0}" oninput="osServTot()"><b class="ost" style="text-align:right;white-space:nowrap">R$ 0,00</b><button type="button" class="btn sm d" onclick="this.parentNode.remove();osServTot()">×</button>`;
+  d.innerHTML=`<select class="osp" onchange="osServPreco(this)"><option value="">Escolha o serviço</option>${ls.map(p=>`<option value="${p.id}" data-pr="${precoP(p,($('#fos [name=cliente_id]')||{}).value)||0}" ${p.id===x.produto_id?'selected':''}>${esc(p.nome)}</option>`).join('')}${x.produto_id&&!ls.find(p=>p.id===x.produto_id)?`<option value="${esc(x.produto_id)}" selected>${esc(x.nome||'Serviço')}</option>`:''}</select><input class="osq" type="number" min="0" step="any" value="${x.qtd??1}" oninput="osServTot()"><input class="osu" type="number" min="0" step="0.01" value="${x.preco??''}" placeholder="0,00" oninput="osServTot()"><input class="osd" type="number" min="0" max="100" step="any" value="${x.pct??0}" oninput="osServTot()"><b class="ost" style="text-align:right;white-space:nowrap">R$ 0,00</b><button type="button" class="btn sm d" onclick="this.parentNode.remove();osServTot()">×</button>`;
   $('#osserv').appendChild(d);
   if(!ls.length&&!$('#osserv .osaviso'))$('#osserv').insertAdjacentHTML('afterend','<p class="osaviso" style="color:var(--warn);font-size:12.5px">Cadastre os serviços em Produtos com a categoria "Serviço" e o preço.</p>');
 }
+function pdvAplicarTabela(){const cid=S.pdvF.cli;let n=0;S.cart.forEach(i=>{const p=P(i.produto_id);if(p){const v=precoP(p,cid);if(v!==i.preco){i.preco=v;n++}}});if(n)toast('Preços da '+(nomeLista(listaCli(cid))||'tabela normal')+' aplicados');render()}
+function osAplicarTabela(){const cid=($('#fos [name=cliente_id]')||{}).value;let n=0;document.querySelectorAll('#fos .ossl').forEach(l=>{const sel=l.querySelector('.osp');[...sel.options].forEach(o=>{if(o.value){const p=P(o.value);if(p)o.dataset.pr=precoP(p,cid)}});const o=sel.selectedOptions[0];if(o&&o.value){l.querySelector('.osu').value=(+o.dataset.pr).toFixed(2);n++}});if(typeof osServTot==='function')osServTot();const l=listaCli(cid);if(l&&n)toast('Preços da tabela '+nomeLista(l)+' aplicados')}
 function osServPreco(sel){const l=sel.parentNode,o=sel.selectedOptions[0];if(o&&o.dataset.pr!=null&&o.value)l.querySelector('.osu').value=(+o.dataset.pr).toFixed(2);osServTot()}
 function osServLer(){return [...document.querySelectorAll('#osserv .ossl')].map(l=>{const s=l.querySelector('.osp'),o=s.selectedOptions[0];return {produto_id:s.value,nome:o?o.textContent:'',qtd:+l.querySelector('.osq').value||0,preco:+l.querySelector('.osu').value||0,pct:+l.querySelector('.osd').value||0}}).filter(x=>x.produto_id&&x.qtd>0)}
 function osServTot(){let t=0;document.querySelectorAll('#osserv .ossl').forEach(l=>{const v=osServVal({qtd:l.querySelector('.osq').value,preco:l.querySelector('.osu').value,pct:l.querySelector('.osd').value});t+=v;l.querySelector('.ost').textContent=R(v)});
@@ -1532,10 +1546,11 @@ VIEWS.fornecedores=()=>viewCad('fornecedores');
 function formCad(tab,id,rapido){
   const c=CAD[tab],x=id?S[tab].find(y=>y.id===id):{};
   modal(`<h3>${id?'Editar':'Novo'} ${c.um}</h3><form id="fc" class="f" style="grid-template-columns:1fr 1fr">${c.campos.map(([k,l,w])=>`<div ${w?'style="grid-column:span 2"':''}><label>${l}</label><input name="${k}" value="${esc(x[k]||'')}" ${k==='nome'?'required':''} ${k==='email'?'type="email"':''}></div>`).join('')}
+  ${tab==='clientes'&&(S.listas||[]).length?`<div style="grid-column:span 2"><label>Tabela de preço</label><select name="lista_preco"><option value="">Preço normal dos produtos</option>${S.listas.map(l=>`<option value="${l.numero}" ${+x.lista_preco===+l.numero?'selected':''}>${l.numero} - ${esc(l.nome)}</option>`).join('')}</select><div style="color:var(--muted);font-size:12px;margin-top:4px">Na ficha e no PDV, os serviços já vêm com o preço desta tabela.</div></div>`:''}
   <div class="row" style="grid-column:span 2">${id?`<button type="button" class="btn d" onclick="fechar();confirmar('Excluir este ${c.um}? O histórico é mantido.',()=>delCad('${tab}','${id}'))">Excluir</button>`:''}<span class="sp"></span><button type="button" class="btn" onclick="fechar()">Cancelar</button><button class="btn p" id="bc">Salvar</button></div></form>`);
   const avisar=()=>{const f=Object.fromEntries(new FormData($('#fc')));const r=checaCad(tab,f,id);const box=$('#fc .dupx');if(r.b.length||r.a.length)dupBox($('#fc'),r);else if(box)box.remove()};
   ['nome','documento','telefone','email'].forEach(k=>{const el=$('#fc [name='+k+']');if(el)el.addEventListener('change',avisar)});
-  $('#fc').onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));Object.keys(f).forEach(k=>f[k]=f[k].trim()||null);
+  $('#fc').onsubmit=e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));Object.keys(f).forEach(k=>f[k]=f[k].trim()||null);if('lista_preco' in f)f.lista_preco=f.lista_preco?+f.lista_preco:null;
     if(!dupBox(e.target,checaCad(tab,f,id)))return;
     busy($('#bc'),async()=>{
       let nid=id;
